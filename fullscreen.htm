@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Full Screen Demo</title>
+	<style>
+		body {
+			margin: 0;
+			padding: 0;
+			overflow: hidden;
+		}
+
+		#fullscreen {
+			height: 100vh;
+			display: flex;
+			justify-content: center;
+			align-items: center;
+		}
+	</style>
+</head>
+<body>
+
+<div id="fullscreen">
+<iframe src="https://leonleedig.github.io/WPCtest/WPCtest1.html" height="100%" width="100%" ></iframe>
+</div>
+
+<script>
+	document.addEventListener('keydown', function(event) {
+		if (event.code === 'Space') {
+			if (!document.fullscreenElement) {
+				document.documentElement.requestFullscreen();
+			} else {
+				document.exitFullscreen();
+			}
+		}
+	});
+</script>
+
+</body>
+</html>
