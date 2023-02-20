@@ -1,9 +1,9 @@
+
 <html>
   <head>
 	  <title></title>
   </head>
   <body>
-
 <style>
 
 body {
@@ -19,15 +19,8 @@ p {
   text-shadow: 0px 0px 4px #000000; 
 }
 
-a:hover, a:active {
-  color: #FFFFFF;
-}
-
-a:visited {
-  color: #404040;
-}
-
-a:hover, a:visited, a:link, a:active {
+a:visited, hover, a:visited, a:link, a:active {
+            color: #404040;
   text-decoration: none;
 }
 
@@ -52,15 +45,19 @@ a:hover, a:visited, a:link, a:active {
   padding-left: 45%;
   left: 0;
   bottom: 0;
-  background-color: rgba(196,196,196,1);
+background: linear-gradient(rgba(210, 210, 210, 0.5), rgba(196, 196, 196,1), rgba(196, 196, 196, 1), rgba(196, 196, 196, 1));
 }
+  
+  #mask a {
+ padding-right: 30px;
+}
+
 
 #banner {
   position: absolute;
   top: 15%;
   left: 20%;
   padding: 20px;
-  background-color: rgba(196, 196, 196, 0);
 }
 
 </style>
@@ -79,16 +76,16 @@ a:hover, a:visited, a:link, a:active {
 <div id="mask">
 	點選以下項目可展示形貌<br>
 	<a 	href="#"
-		onclick="changeBackground('<p>漢班托塔大愛屋</p>', 'https://sketchfab.com/models/dbc5ebcf226e49c7b413d456bc7f2597/embed?autostart=1')">
-			|漢班托塔大愛屋|     
+		onclick="changeBackground('<p>漢班托塔大愛屋</div>', 'https://sketchfab.com/models/dbc5ebcf226e49c7b413d456bc7f2597/embed?autostart=1')">
+漢班托塔大愛屋    
 	</a>
         <a	href="#"
 		onclick="changeBackground('<p>雅加達金卡蓮大愛一村</p>', 'https://sketchfab.com/models/acaaa34e23cb48d1a569692f4de7d9b8/embed?autostart=1')">
-			|雅加達金卡蓮大愛一村|     
+雅加達金卡蓮大愛一村   
 	</a>
         <a	href="#"
 		onclick="changeBackground('<p>本土大愛屋演變</p>', 'https://sketchfab.com/models/dcd0a4bf47994ce4a3f1baa0eb961547/embed?autostart=1')">
-			|本土大愛屋演變|
+本土大愛屋演變
 	</a>
 <br>
 </div>
