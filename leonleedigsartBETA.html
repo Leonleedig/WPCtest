@@ -11,20 +11,15 @@
 </head>
 <body>
     <script>
-        let clickCount = 0;
-
-        // 監聽點擊或觸碰事件
-        document.body.addEventListener('click', () => {
-            clickCount++;
-
-            // 判斷是否達到閾值
-            if (clickCount === 2) {
-                // 切換到全螢幕模式
-                document.documentElement.requestFullscreen();
-            } else if (clickCount === 4) {
+        // 監聽雙擊事件
+        document.body.addEventListener('dblclick', () => {
+            // 判斷是否處於全螢幕模式
+            if (document.fullscreenElement) {
                 // 切換回正常視窗模式
                 document.exitFullscreen();
-                clickCount = 0; // 重置計數
+            } else {
+                // 切換到全螢幕模式
+                document.documentElement.requestFullscreen();
             }
         });
     </script>
