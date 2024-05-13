@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>雙擊全螢幕示例</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  /* 禁用雙擊縮放 */
+  .no-zoom {
+    touch-action: manipulation;
+  }
+</style>
+</head>
+<body style="background-color: #000000; background-attachment: fixed;">
+
+<center>
+  <div class="elfsight-app-5b5c6904-b401-4ecf-97e8-82d7f2169e00 no-zoom" id="fullscreen-div">點擊兩次進入全螢幕</div>
+</center>
+
+<script src="https://static.elfsight.com/platform/platform.js" data-use-service-core></script>
+<script>
+  // 確保頁面加載完成後再執行代碼
+  window.onload = function() {
+    // 獲取元素
+    var fsElement = document.getElementById('fullscreen-div');
+
+    // 雙擊事件處理函數
+    function doubleTap() {
+      if (!document.fullscreenElement) {
+        if (fsElement.requestFullscreen) {
+          fsElement.requestFullscreen();
+        } else if (fsElement.webkitRequestFullscreen) { /* Safari */
+          fsElement.webkitRequestFullscreen();
+        } else if (fsElement.msRequestFullscreen) { /* IE11 */
+          fsElement.msRequestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) { /* Safari */
+          document.webkitExitFullscreen();
+        } else if (document.msExitFullscreen) { /* IE11 */
+          document.msExitFullscreen();
+        }
+      }
+    }
+
+    // 監聽雙擊事件
+    fsElement.addEventListener('dblclick', doubleTap);
+  };
+</script>
+
+</body>
+</html>
