@@ -22,6 +22,28 @@
                 document.documentElement.requestFullscreen();
             }
         });
+         let lastTapTime = 0;
+
+        // 監聽觸碰事件
+        document.body.addEventListener('touchstart', (event) => {
+            const currentTime = new Date().getTime();
+            const timeSinceLastTap = currentTime - lastTapTime;
+
+            // 判斷是否處於全螢幕模式
+            if (document.fullscreenElement) {
+                // 如果兩次觸碰的時間間隔小於 300 毫秒，切換回正常視窗模式
+                if (timeSinceLastTap < 300) {
+                    document.exitFullscreen();
+                }
+            } else {
+                // 如果兩次觸碰的時間間隔小於 300 毫秒，切換到全螢幕模式
+                if (timeSinceLastTap < 300) {
+                    document.documentElement.requestFullscreen();
+                }
+            }
+
+            lastTapTime = currentTime;
+        });
     </script>
 
     <!-- 你的其他網頁內容 -->
