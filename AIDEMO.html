@@ -1,8 +1,36 @@
+<!DOCTYPE html>
 <html>
-<head><title>AI DEMO</title></head>
+<head>
+	<title>AIGC Fiction Fighterjet</title>
+	<style>
+		body {
+			margin: 0;
+			padding: 0;
+			overflow: hidden;
+		}
+
+		#fullscreen {
+			height: 100vh;
+			display: flex;
+			justify-content: center;
+			align-items: center;
+		}
+	</style>
+</head>
 <body>
 <!-- Elfsight Slider | Untitled Slider -->
 <script src="https://static.elfsight.com/platform/platform.js" async></script>
-<div class="elfsight-app-fd7e1860-877d-421e-b958-a7f8acda9402" data-elfsight-app-lazy></div>
+<div id="fullscreen" class="elfsight-app-fd7e1860-877d-421e-b958-a7f8acda9402" data-elfsight-app-lazy></div>
+  <script>
+	document.addEventListener('keydown', function(event) {
+		if (event.code === 'Space') {
+			if (!document.fullscreenElement) {
+				document.documentElement.requestFullscreen();
+			} else {
+				document.exitFullscreen();
+			}
+		}
+	});
+</script>
 </body>
 </html>
