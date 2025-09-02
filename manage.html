@@ -396,8 +396,8 @@
     
     <div id="zones-container"></div>
     
-    <!-- 浮動重新整理按鈕 -->
-    <button class="refresh-button" id="refresh-button">
+    <!-- 浮動重新整理按鈕 (暫時隱藏) -->
+    <button class="refresh-button" id="refresh-button" style="display: none;">
         <span class="material-icons">refresh</span>
     </button>
     
@@ -449,7 +449,6 @@
         document.addEventListener('DOMContentLoaded', () => {
             const API_KEY = 'AIzaSyDrKPFmjLr2-QmF9vf7nFqkC75z0M2I_B8';
             const SPREADSHEET_ID = '1UGZQa5FQY-3CaTtC7-8LfJz70sDX1UbkbVDAGciEZjQ';
-            // 重要：請將此處替換為你部署的 Apps Script Web 應用程式 URL，其結尾應為 /exec
             const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyWhG6pKy13HJ7wbk7uwHKRgo48rjA4_FSQ31T3oD-nzzAWLion1rnQVTEMzosE8Hx-rw/exec';
             
             const zonesContainer = document.getElementById('zones-container');
@@ -465,7 +464,7 @@
             const aliasInput = document.getElementById('alias-input');
             const noteInput = document.getElementById('note-input');
             const messageBox = document.getElementById('message-box');
-            const refreshButton = document.getElementById('refresh-button'); // 新增：重新整理按鈕
+            const refreshButton = document.getElementById('refresh-button');
 
             const changeBtn = document.getElementById('change-btn');
             const propertyArea = document.getElementById('property-area');
@@ -476,6 +475,109 @@
             let zones = [];
             let allObjects = [];
             let statusOptions = [];
+            let autoRefreshInterval = null;
+
+            // 定義本地儲存鍵值
+            const LOCAL_STORAGE_ZONE_KEY = 'zoneState';
+            const LOCAL_STORAGE_CATEGORY_KEY = 'categoryState';
+            const LOCAL_STORAGE_PANEL_KEY = 'panelState';
+            
+            // 啟動/重啟自動更新計時器
+            function startAutoRefresh() {
+                // 如果已經有計時器，先清除
+                if (autoRefreshInterval) {
+                    clearInterval(autoRefreshInterval);
+                }
+                autoRefreshInterval = setInterval(fetchSpreadsheetData, 5000);
+            }
+
+            // 停止自動更新計時器
+            function stopAutoRefresh() {
+                if (autoRefreshInterval) {
+                    clearInterval(autoRefreshInterval);
+                    autoRefreshInterval = null;
+                }
+            }
+
+            // 儲存所有相關狀態到本地儲存
+            function saveState() {
+                // 儲存區域展開狀態
+                const expandedZones = Array.from(document.querySelectorAll('.zone.expanded')).map(zone => zone.id);
+                localStorage.setItem(LOCAL_STORAGE_ZONE_KEY, JSON.stringify(expandedZones));
+
+                // 儲存類別按鈕狀態
+                const activeCategories = Array.from(document.querySelectorAll('.category-button.active')).map(btn => btn.getAttribute('data-category'));
+                localStorage.setItem(LOCAL_STORAGE_CATEGORY_KEY, JSON.stringify(activeCategories));
+                
+                // 儲存導航面板狀態
+                localStorage.setItem(LOCAL_STORAGE_PANEL_KEY, JSON.stringify({
+                    expanded: floatingPanel.classList.contains('expanded'),
+                    openPanelObjectId: document.querySelector('.object[data-panel-open="true"]')?.getAttribute('data-id') || null,
+                    propertyAreaVisible: propertyArea.classList.contains('visible')
+                }));
+            }
+
+            // 從本地儲存載入並恢復網頁狀態
+            function loadState() {
+                // 恢復區域展開狀態
+                const savedZones = localStorage.getItem(LOCAL_STORAGE_ZONE_KEY);
+                if (savedZones) {
+                    const expandedZones = JSON.parse(savedZones);
+                    expandedZones.forEach(zoneId => {
+                        const zone = document.getElementById(zoneId);
+                        if (zone) {
+                            zone.classList.add('expanded');
+                        }
+                    });
+                }
+                
+                // 恢復類別按鈕狀態
+                const savedCategories = localStorage.getItem(LOCAL_STORAGE_CATEGORY_KEY);
+                if (savedCategories) {
+                    const activeCategories = JSON.parse(savedCategories);
+                    document.querySelectorAll('.category-button').forEach(btn => {
+                        if (activeCategories.includes(btn.getAttribute('data-category'))) {
+                            btn.classList.add('active');
+                        } else {
+                            btn.classList.remove('active');
+                        }
+                    });
+                }
+                
+                // 修正：在恢復類別按鈕狀態後，立即同步更新物件的顯示狀態
+                filterObjects();
+
+                // 恢復面板狀態
+                const savedPanelState = localStorage.getItem(LOCAL_STORAGE_PANEL_KEY);
+                if (savedPanelState) {
+                    const state = JSON.parse(savedPanelState);
+                    if (state.expanded) {
+                        floatingPanel.classList.add('expanded');
+                    } else {
+                        floatingPanel.classList.remove('expanded');
+                    }
+                    
+                    if (state.openPanelObjectId) {
+                        // 使用 setTimeout 等待 DOM 渲染完成
+                        setTimeout(() => {
+                            const object = document.querySelector(`.object[data-id="${state.openPanelObjectId}"]`);
+                            if (object) {
+                                // 觸發標準點擊事件，讓面板開啟並載入資料
+                                object.click();
+                                
+                                // 根據儲存的狀態覆蓋屬性區的預設開合狀態
+                                if (state.propertyAreaVisible) {
+                                    changeBtn.style.display = 'none';
+                                    propertyArea.classList.add('visible');
+                                } else {
+                                    changeBtn.style.display = 'block';
+                                    propertyArea.classList.remove('visible');
+                                }
+                            }
+                        }, 100);
+                    }
+                }
+            }
 
             // 整合所有資料載入邏輯到一個函式中
             async function fetchSpreadsheetData() {
@@ -509,6 +611,9 @@
                     renderCategories(categoriesData.values);
                     renderObjects(objectsData.values);
                     
+                    // 重新渲染後載入之前儲存的狀態
+                    loadState();
+
                 } catch (error) {
                     console.error("無法載入試算表資料:", error);
                     showMessage("載入資料失敗。請檢查您的API金鑰或試算表ID。", 'red');
@@ -630,6 +735,7 @@
                         });
                         zone.classList.toggle('expanded');
                         updateToggleButton();
+                        saveState(); // 點擊時儲存狀態
                     });
 
                     const dropAreas = [header, zone.querySelector('.zone-content')];
@@ -655,6 +761,7 @@
                                 const rowIndex = draggedItem.getAttribute('data-row-index');
                                 const newZone = zone.querySelector('h3').textContent;
                                 updateObjectData(rowIndex, { zone: newZone });
+                                saveState(); // 拖放時儲存狀態
                             }
                         });
                     });
@@ -691,6 +798,7 @@
                         item.setAttribute('data-panel-open', !isOpen);
 
                         if (!isOpen) {
+                            stopAutoRefresh(); // 停止自動更新
                             const name = item.getAttribute('data-name');
                             const id = item.getAttribute('data-id');
                             const category = item.getAttribute('data-category');
@@ -720,9 +828,11 @@
                             renderPropertyArea(status);
                             
                             objectInfoPanel.currentObject = item;
-
+                            saveState(); // 面板開啟時儲存狀態
                         } else {
                             objectInfoPanel.classList.remove('visible');
+                            startAutoRefresh(); // 重新啟動自動更新
+                            saveState(); // 面板關閉時儲存狀態
                         }
                     });
                 });
@@ -734,6 +844,7 @@
                     button.addEventListener('click', () => {
                         button.classList.toggle('active');
                         filterObjects();
+                        saveState(); // 類別按鈕點擊時儲存狀態
                     });
                 });
             }
@@ -768,9 +879,13 @@
 
             panelToggleBtn.addEventListener('click', () => {
                 floatingPanel.classList.add('expanded');
+                stopAutoRefresh(); // 新增：展開導覽面板時停止自動更新
+                saveState(); // 導覽面板開合時儲存狀態
             });
             collapseBtn.addEventListener('click', () => {
                 floatingPanel.classList.remove('expanded');
+                startAutoRefresh(); // 新增：收合導覽面板時重新啟動自動更新
+                saveState(); // 導覽面板開合時儲存狀態
             });
 
             toggleAllBtn.addEventListener('click', () => {
@@ -780,6 +895,7 @@
                     zones.forEach(zone => zone.classList.add('expanded'));
                 }
                 updateToggleButton();
+                saveState(); // 點擊時儲存狀態
             });
             
             function closeObjectPanel() {
@@ -788,6 +904,8 @@
                     openPanel.setAttribute('data-panel-open', 'false');
                 }
                 objectInfoPanel.classList.remove('visible');
+                startAutoRefresh(); // 重新啟動自動更新
+                saveState(); // 面板關閉時儲存狀態
             }
 
             objectPanelCloseBtn.addEventListener('click', closeObjectPanel);
@@ -807,6 +925,7 @@
             changeBtn.addEventListener('click', () => {
                 changeBtn.style.display = 'none';
                 propertyArea.classList.add('visible');
+                saveState(); // 屬性區開合時儲存狀態
             });
 
             confirmBtn.addEventListener('click', () => {
@@ -841,6 +960,7 @@
                 propertyArea.classList.remove('visible');
                 changeBtn.style.display = 'block';
                 closeObjectPanel();
+                saveState(); // 確認更新時儲存狀態
             });
 
             function renderPropertyArea(currentStatus) {
@@ -909,17 +1029,11 @@
                     showMessage("更新資料失敗。請檢查 Apps Script 是否正確部署。", 'red');
                 }
             }
-
-            // 新增：重新整理按鈕事件
-            refreshButton.addEventListener('click', () => {
-                fetchSpreadsheetData();
+            
+            // 首次載入資料並啟動自動更新
+            fetchSpreadsheetData().then(() => {
+                startAutoRefresh();
             });
-            
-            // 首次載入資料
-            fetchSpreadsheetData();
-            
-            // 移除自動重新整理
-            // setInterval(fetchSpreadsheetData, 5000);
         });
     </script>
 </body>
