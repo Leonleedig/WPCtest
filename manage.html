@@ -361,7 +361,7 @@
 
         /* 重新整理按鈕樣式 - 已修正為單一且隱藏 */
         .refresh-button {
-            display: none;
+            display: flex;
             position: fixed;
             top: 20px;
             right: 20px;
@@ -480,6 +480,7 @@
             // 整合所有資料載入邏輯到一個函式中
             async function fetchSpreadsheetData() {
                 refreshButton.classList.add('loading'); // 顯示載入動畫
+                
                 try {
                     const zonesUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/前端定義!D2:D?key=${API_KEY}`;
                     const categoriesUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/前端定義!C2:C?key=${API_KEY}`;
@@ -499,7 +500,6 @@
                     const statusesData = await statusesRes.json();
 
                     statusOptions = statusesData.values ? statusesData.values.flat() : [];
-                    statusOptions.push('正常');
 
                     // 重新渲染前先清空
                     zonesContainer.innerHTML = '';
@@ -817,6 +817,8 @@
                 const newAlias = aliasInput.value;
                 const newNote = noteInput.value;
                 const newStatus = statusButtonsContainer.querySelector('.status-button.active')?.textContent || '';
+                
+                const statusToSend = newStatus;
 
                 currentObject.setAttribute('data-alias', newAlias);
                 currentObject.setAttribute('data-note', newNote);
@@ -832,7 +834,7 @@
 
                 updateObjectData(rowIndex, {
                     alias: newAlias,
-                    status: newStatus,
+                    status: statusToSend,
                     note: newNote
                 });
 
@@ -916,8 +918,8 @@
             // 首次載入資料
             fetchSpreadsheetData();
             
-            // 每 5 秒自動重新整理資料
-            setInterval(fetchSpreadsheetData, 5000);
+            // 移除自動重新整理
+            // setInterval(fetchSpreadsheetData, 5000);
         });
     </script>
 </body>
