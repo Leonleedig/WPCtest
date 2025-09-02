@@ -84,15 +84,6 @@
         .object.hidden {
             display: none;
         }
-        .object:active {
-            cursor: grabbing;
-        }
-        .object.dragging {
-            opacity: 0.5;
-            transform: scale(0.95);
-        }
-        
-        /* 損壞/儲備/暫代的物件樣式 */
         .object.corrupted {
             background-color: #f44336; /* 背景 */
             color: white; /* 文字 */
@@ -108,7 +99,12 @@
         .object.reserved:hover {
             background-color: #e68a00;
         }
-
+        
+        .object.dragging {
+            opacity: 0.5;
+            transform: scale(0.95);
+        }
+        
         /* 物件資訊面板樣式 */
         .object-panel {
             position: fixed;
@@ -183,14 +179,13 @@
 
         /* 屬性區塊樣式 */
         .property-area {
-            /* 移除背景顏色與邊框 */
             background-color: transparent;
             border: none;
             border-radius: 4px;
             margin-top: 10px;
-            padding: 0; /* 調整內距使其更緊湊 */
+            padding: 0;
             width: 100%;
-            display: none; /* 預設隱藏 */
+            display: none;
             box-sizing: border-box;
             text-align: left;
         }
@@ -363,11 +358,48 @@
             display: none;
             transition: opacity 0.5s ease-in-out;
         }
+
+        /* 重新整理按鈕樣式 - 已修正為單一且隱藏 */
+        .refresh-button {
+            display: none;
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: #fff;
+            color: #3f51b5;
+            border: 2px solid #3f51b5;
+            border-radius: 50%;
+            width: 45px;
+            height: 45px;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            z-index: 1000;
+        }
+        .refresh-button:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+        }
+        .refresh-button.loading {
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
     
     <div id="zones-container"></div>
+    
+    <!-- 浮動重新整理按鈕 -->
+    <button class="refresh-button" id="refresh-button">
+        <span class="material-icons">refresh</span>
+    </button>
     
     <!-- 浮動導航面板 -->
     <div class="floating-panel">
@@ -425,7 +457,7 @@
             const toggleAllBtn = document.getElementById('toggle-all-btn');
             const floatingPanel = document.querySelector('.floating-panel');
             const panelToggleBtn = document.querySelector('.panel-toggle-btn');
-            const collapseBtn = document.querySelector('.collapse-btn');
+            const collapseBtn = document.querySelector('.panel-content .collapse-btn');
             const objectInfoPanel = document.getElementById('object-info-panel');
             const objectPanelTitle = document.getElementById('panel-title');
             const objectPanelContent = document.getElementById('panel-content');
@@ -433,8 +465,8 @@
             const aliasInput = document.getElementById('alias-input');
             const noteInput = document.getElementById('note-input');
             const messageBox = document.getElementById('message-box');
+            const refreshButton = document.getElementById('refresh-button'); // 新增：重新整理按鈕
 
-            // 新增：屬性區塊相關元素
             const changeBtn = document.getElementById('change-btn');
             const propertyArea = document.getElementById('property-area');
             const confirmBtn = document.getElementById('confirm-btn');
@@ -444,15 +476,16 @@
             let zones = [];
             let allObjects = [];
             let statusOptions = [];
-            
+
+            // 整合所有資料載入邏輯到一個函式中
             async function fetchSpreadsheetData() {
+                refreshButton.classList.add('loading'); // 顯示載入動畫
                 try {
                     const zonesUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/前端定義!D2:D?key=${API_KEY}`;
                     const categoriesUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/前端定義!C2:C?key=${API_KEY}`;
                     const objectsUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/總表!A2:G?key=${API_KEY}`;
                     const statusesUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/前端定義!E2:E?key=${API_KEY}`;
-
-
+                    
                     const [zonesRes, categoriesRes, objectsRes, statusesRes] = await Promise.all([
                         fetch(zonesUrl),
                         fetch(categoriesUrl),
@@ -465,9 +498,12 @@
                     const objectsData = await objectsRes.json();
                     const statusesData = await statusesRes.json();
 
-                    // 儲存狀態選項，並加入「正常」
                     statusOptions = statusesData.values ? statusesData.values.flat() : [];
                     statusOptions.push('正常');
+
+                    // 重新渲染前先清空
+                    zonesContainer.innerHTML = '';
+                    allObjects = [];
 
                     renderZones(zonesData.values);
                     renderCategories(categoriesData.values);
@@ -475,12 +511,9 @@
                     
                 } catch (error) {
                     console.error("無法載入試算表資料:", error);
-                    // 為了避免因空資料而導致的錯誤，添加了此判斷
-                    if (error.message.includes('appendChild')) {
-                        showMessage("載入資料失敗。請檢查您的API金鑰或試算表ID，並確認試算表中有資料。", 'red');
-                    } else {
-                        showMessage("載入資料失敗。請檢查您的API金鑰或試算表ID。", 'red');
-                    }
+                    showMessage("載入資料失敗。請檢查您的API金鑰或試算表ID。", 'red');
+                } finally {
+                    refreshButton.classList.remove('loading'); // 隱藏載入動畫
                 }
             }
             
@@ -517,7 +550,6 @@
                     zonesContainer.appendChild(zoneDiv);
                 });
                 
-                // 將 NodeList 轉換為 Array 以便後續使用 find 方法
                 zones = Array.from(document.querySelectorAll('.zone'));
                 attachZoneEventListeners();
                 updateToggleButton();
@@ -546,20 +578,17 @@
                     const objectDiv = document.createElement('div');
                     objectDiv.className = 'object';
                     objectDiv.draggable = true;
-                    // 使用更清晰的屬性名稱，並儲存行數
-                    objectDiv.setAttribute('data-id', rowData[0]); // A欄
-                    objectDiv.setAttribute('data-category', rowData[1]); // B欄
-                    objectDiv.setAttribute('data-zone', rowData[2]); // C欄
-                    objectDiv.setAttribute('data-status', rowData[3]); // D欄
-                    objectDiv.setAttribute('data-note', rowData[4]); // E欄
-                    objectDiv.setAttribute('data-alias', rowData[5]); // F欄
-                    objectDiv.setAttribute('data-name', rowData[6]); // G欄
-                    objectDiv.setAttribute('data-row-index', index + 2); // 儲存行號，+2是為了對應試算表中的實際行號
+                    objectDiv.setAttribute('data-id', rowData[0]);
+                    objectDiv.setAttribute('data-category', rowData[1]);
+                    objectDiv.setAttribute('data-zone', rowData[2]);
+                    objectDiv.setAttribute('data-status', rowData[3]);
+                    objectDiv.setAttribute('data-note', rowData[4]);
+                    objectDiv.setAttribute('data-alias', rowData[5]);
+                    objectDiv.setAttribute('data-name', rowData[6]);
+                    objectDiv.setAttribute('data-row-index', index + 2);
                     
-                    // 物件顯示內容: 圖標後方加入 F 欄的字串
-                    const objectHTML = `${rowData[6]}<span>${rowData[5]}</span>`; // G欄 + F欄
+                    const objectHTML = `${rowData[6]}<span>${rowData[5]}</span>`;
                     
-                    // 根據 D 欄內容添加對應的樣式類別
                     if (rowData[3] && rowData[3].includes('損壞')) {
                         objectDiv.classList.add('corrupted');
                     } else if (rowData[3] === '儲備' || rowData[3] === '暫代') {
@@ -570,7 +599,6 @@
                     
                     allObjects.push(objectDiv);
                     
-                    // 根據C欄的值，找到並將物件放入對應的區域
                     const targetZone = zones.find(zone => {
                         return zone.querySelector('h3').textContent === rowData[2];
                     });
@@ -578,7 +606,6 @@
                     if (targetZone) {
                         targetZone.querySelector('.zone-content').appendChild(objectDiv);
                     } else {
-                        // 如果找不到對應的區域，將物件添加到第一個區域作為備用
                         if (zones.length > 0) {
                             zones[0].querySelector('.zone-content').appendChild(objectDiv);
                             console.error(`找不到物件 "${rowData[0]}" 對應的區域 "${rowData[2]}"。物件已放置於第一個區域。`);
@@ -589,10 +616,9 @@
                 });
 
                 attachObjectEventListeners();
-                filterObjects(); // 初始篩選
+                filterObjects();
             }
 
-            // 附上事件監聽器
             function attachZoneEventListeners() {
                 zones.forEach(zone => {
                     const header = zone.querySelector('.zone-header');
@@ -606,7 +632,6 @@
                         updateToggleButton();
                     });
 
-                    // 拖曳放置區域
                     const dropAreas = [header, zone.querySelector('.zone-content')];
                     dropAreas.forEach(dropArea => {
                         dropArea.addEventListener('dragover', (e) => {
@@ -626,7 +651,6 @@
                             dropArea.classList.remove('drag-over');
                             if (draggedItem) {
                                 zone.querySelector('.zone-content').appendChild(draggedItem);
-                                // 拖曳後更新資料
                                 const id = draggedItem.getAttribute('data-id');
                                 const rowIndex = draggedItem.getAttribute('data-row-index');
                                 const newZone = zone.querySelector('h3').textContent;
@@ -675,7 +699,6 @@
                             const note = item.getAttribute('data-note');
                             const alias = item.getAttribute('data-alias');
                             
-                            // 將 textContent 改為 innerHTML 以正確顯示圖標
                             objectPanelTitle.innerHTML = name;
                             
                             objectPanelContent.innerHTML = `
@@ -688,18 +711,14 @@
                             `;
                             objectInfoPanel.classList.add('visible');
                             
-                            // 預設狀態：隱藏屬性區
                             changeBtn.style.display = 'block';
                             propertyArea.classList.remove('visible');
                             
-                            // 在開啟面板時，先載入對應的資料到輸入欄位
                             aliasInput.value = alias;
                             noteInput.value = note;
 
-                            // 呼叫渲染屬性區的函式
                             renderPropertyArea(status);
                             
-                            // 將當前物件存入全域變數，以便確定按鈕事件是針對哪個物件
                             objectInfoPanel.currentObject = item;
 
                         } else {
@@ -747,7 +766,6 @@
                 });
             }
 
-            // 導航面板切換
             panelToggleBtn.addEventListener('click', () => {
                 floatingPanel.classList.add('expanded');
             });
@@ -755,7 +773,6 @@
                 floatingPanel.classList.remove('expanded');
             });
 
-            // 全部展開/收合按鈕
             toggleAllBtn.addEventListener('click', () => {
                 if (areAllZonesExpanded()) {
                     zones.forEach(zone => zone.classList.remove('expanded'));
@@ -765,7 +782,6 @@
                 updateToggleButton();
             });
             
-            // 關閉物件面板的邏輯
             function closeObjectPanel() {
                 const openPanel = document.querySelector('.object[data-panel-open="true"]');
                 if (openPanel) {
@@ -782,17 +798,15 @@
                 }
             });
 
-            // 複製功能
             objectPanelContent.addEventListener('mousedown', (e) => {
                 const textToCopy = e.target.textContent;
-                document.execCommand('copy'); // 使用舊版API確保相容性
+                document.execCommand('copy');
                 console.log('內容已複製到剪貼簿。');
             });
             
-            // 新增：屬性區塊的互動邏輯
             changeBtn.addEventListener('click', () => {
-                changeBtn.style.display = 'none'; // 隱藏「更改」按鈕
-                propertyArea.classList.add('visible'); // 顯示屬性區
+                changeBtn.style.display = 'none';
+                propertyArea.classList.add('visible');
             });
 
             confirmBtn.addEventListener('click', () => {
@@ -804,15 +818,12 @@
                 const newNote = noteInput.value;
                 const newStatus = statusButtonsContainer.querySelector('.status-button.active')?.textContent || '';
 
-                // 更新物件的 HTML 和 data 屬性
                 currentObject.setAttribute('data-alias', newAlias);
                 currentObject.setAttribute('data-note', newNote);
                 currentObject.setAttribute('data-status', newStatus);
                 currentObject.innerHTML = `${currentObject.getAttribute('data-name')}<span>${newAlias}</span>`;
 
-                // 移除現有的狀態樣式
                 currentObject.classList.remove('corrupted', 'reserved');
-                // 根據新狀態添加樣式
                 if (newStatus.includes('損壞')) {
                     currentObject.classList.add('corrupted');
                 } else if (newStatus === '儲備' || newStatus === '暫代') {
@@ -825,12 +836,11 @@
                     note: newNote
                 });
 
-                propertyArea.classList.remove('visible'); // 隱藏屬性區
-                changeBtn.style.display = 'block'; // 顯示「更改」按鈕
+                propertyArea.classList.remove('visible');
+                changeBtn.style.display = 'block';
                 closeObjectPanel();
             });
 
-            // 新增：渲染屬性區的函式
             function renderPropertyArea(currentStatus) {
                 statusButtonsContainer.innerHTML = '';
                 statusOptions.forEach(status => {
@@ -838,11 +848,9 @@
                     button.textContent = status;
                     button.className = 'status-button';
                     
-                    // 根據當前狀態設定按鈕為選中狀態
                     if (status === currentStatus || (currentStatus === '' && status === '正常')) {
                         button.classList.add('active');
                         
-                        // 新增：根據特定狀態設定顏色
                         if (status === '暫代' || status === '儲備') {
                             button.style.backgroundColor = '#ff9900';
                             button.style.color = 'white';
@@ -852,19 +860,15 @@
                         }
                     }
 
-                    // 為按鈕添加點擊事件監聽器
                     button.addEventListener('click', () => {
-                        // 移除所有按鈕的 active 類別和自訂顏色
                         Array.from(statusButtonsContainer.children).forEach(btn => {
                             btn.classList.remove('active');
                             btn.style.backgroundColor = '';
                             btn.style.color = '';
                         });
                         
-                        // 為被點擊的按鈕添加 active 類別
                         button.classList.add('active');
                         
-                        // 為被點擊的按鈕設定特定顏色
                         if (button.textContent === '暫代' || button.textContent === '儲備') {
                             button.style.backgroundColor = '#ff9900';
                             button.style.color = 'white';
@@ -878,7 +882,6 @@
                 });
             }
 
-            // 新增：發送更新資料到 Apps Script 的函式
             async function updateObjectData(rowIndex, data) {
                 if (APPS_SCRIPT_URL.includes('YOUR_DEPLOYMENT_ID')) {
                     showMessage("請先在 Apps Script 中部署程式碼並更新 URL", 'red');
@@ -888,7 +891,7 @@
                 try {
                     const response = await fetch(APPS_SCRIPT_URL, {
                         method: 'POST',
-                        mode: 'no-cors', // 使用 no-cors 以避免跨域錯誤
+                        mode: 'no-cors',
                         headers: {
                             'Content-Type': 'application/json',
                         },
@@ -898,7 +901,6 @@
                         })
                     });
                     
-                    // 因為使用 no-cors 模式，我們無法檢查 response.ok，只能假設成功
                     showMessage("資料已成功更新！", 'green');
                 } catch (error) {
                     console.error("更新資料失敗:", error);
@@ -906,8 +908,16 @@
                 }
             }
 
-            // 啟動應用程式
+            // 新增：重新整理按鈕事件
+            refreshButton.addEventListener('click', () => {
+                fetchSpreadsheetData();
+            });
+            
+            // 首次載入資料
             fetchSpreadsheetData();
+            
+            // 每 5 秒自動重新整理資料
+            setInterval(fetchSpreadsheetData, 5000);
         });
     </script>
 </body>
