@@ -76,6 +76,11 @@
             font-size: 20px;
             cursor: grab;
             transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.4s ease;
+             /* 修正 iPhone 長按選取問題 START */
+            user-select: none;
+            -webkit-user-select: none; /* 針對 WebKit 核心 (如 Safari) */
+            touch-action: manipulation; /* 幫助觸控互動響應 */
+            /* 修正 iPhone 長按選取問題 END */
         }
         .object[data-panel-open="false"] {
             cursor: pointer;
