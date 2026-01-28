@@ -5,31 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>資料盤點 PRO</title>
     
-    <script>
-        const PWA_CONFIG = {
-            name: "資料盤點 PRO",
-            short_name: "資料盤點",
-            icon: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiB2aWV3Qm94PSIwIDAgMTkyIDE5MiI+PHJlY3Qgd2lkdGg9IjE5MiIgaGVpZ2h0PSIxOTIiIGZpbGw9IiM0ZjQ2ZTUiLz48ZyBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjEyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxyZWN0IHg9IjQwIiB5PSI0MCIgd2lkdGg9IjExMiIgaGVpZ2h0PSExMTIiIHJ4PSIxMiIvPjxwYXRoIGQ9Ik00MCA4MGgxMTJNNDAgMTIwaDExMk04MCA0MHYxMTIiLz48L2c+PC9zdmc+",
-            theme_color: "#4f46e5",
-            background_color: "#f8fafc"
-        };
-        const manifest = {
-            "name": PWA_CONFIG.name,
-            "short_name": PWA_CONFIG.short_name,
-            "start_url": window.location.href,
-            "display": "standalone",
-            "background_color": PWA_CONFIG.background_color,
-            "theme_color": PWA_CONFIG.theme_color,
-            "icons": [{ "src": PWA_CONFIG.icon, "sizes": "512x512", "type": "image/png" }]
-        };
-        const manifestBlob = new Blob([JSON.stringify(manifest)], {type: 'application/manifest+json'});
-        const manifestURL = URL.createObjectURL(manifestBlob);
-        const link = document.createElement('link');
-        link.rel = 'manifest';
-        link.href = manifestURL;
-        document.head.appendChild(link);
-    </script>
-    
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -47,9 +22,6 @@
         .details-open { grid-template-rows: 1fr; }
         .details-inner { overflow: hidden; }
 
-        #toast { position: fixed; top: 20px; left: 50%; transform: translate(-50%, -250%); z-index: 1000; transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-        #toast.show { transform: translate(-50%, 80px); }
-        
         .custom-select {
             appearance: none;
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='white' stroke-width='3'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7' /%3E%3C/svg%3E");
@@ -58,97 +30,142 @@
             background-size: 1rem;
         }
 
-        .pocket-btn:active { transform: scale(0.95); }
+        .checkbox-item:checked + label {
+            background-color: #4f46e5;
+            color: white;
+            border-color: #4f46e5;
+        }
+
+        /* 內容顯示項目的排版優化 */
+        .content-row {
+            display: flex;
+            align-items: flex-start;
+            padding-top: 0.5rem;
+            padding-bottom: 0.5rem;
+            font-size: 1.05rem; /* 字體加大 */
+        }
+        .content-prefix {
+            flex-shrink: 0;
+            width: 80px; /* 前綴固定寬度 */
+            font-weight: 900;
+            color: #818cf8; /* indigo-400 */
+            font-size: 0.85rem;
+            padding-top: 0.2rem;
+            margin-right: 0.75rem; /* 水平間隙 */
+        }
+        .content-text {
+            flex-grow: 1;
+            color: #334155; /* slate-700 */
+            line-height: 1.6;
+            word-break: break-all;
+        }
+        .content-divider {
+            border: 0;
+            border-top: 1px solid #f1f5f9; /* slate-100 */
+            margin: 0;
+        }
+        .content-divider:last-child {
+            display: none;
+        }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-900 overflow-x-hidden">
+<body class="bg-slate-50 text-slate-900">
 
     <header class="bg-indigo-600 text-white sticky top-0 z-40 shadow-lg">
         <div class="px-4 py-3 flex justify-between items-center gap-4">
             <div class="flex items-center gap-2 min-w-0 flex-grow">
-                <i data-lucide="database" size="22" class="flex-shrink-0"></i>
+                <i data-lucide="database" size="22"></i>
                 <h1 id="app-title" class="font-black tracking-tight text-lg truncate">資料盤點 PRO</h1>
             </div>
-            <div class="flex gap-2 flex-shrink-0">
-                <button onclick="document.getElementById('fileInput').click()" class="p-2 bg-white/10 rounded-full active:scale-95">
-                    <i data-lucide="file-up" size="20"></i>
-                </button>
-            </div>
+            <button onclick="document.getElementById('fileInput').click()" class="p-2 bg-white/10 rounded-full active:scale-95">
+                <i data-lucide="file-up" size="20"></i>
+            </button>
         </div>
         
         <div id="control-bar" class="px-4 pb-3 flex items-center gap-2 hidden bg-indigo-600 border-t border-indigo-500/30 pt-2">
             <div class="flex items-center gap-2 flex-grow bg-white/20 rounded-lg px-3 py-1 border border-white/10">
                 <span class="text-indigo-100 text-xs font-bold whitespace-nowrap">工作表：</span>
-                <select id="sheet-dropdown" onchange="loadSheetData(this.value)" class="custom-select flex-grow bg-transparent text-white border-none pr-8 py-1.5 text-sm font-bold outline-none focus:ring-0"></select>
+                <select id="sheet-dropdown" onchange="loadSheetData(this.value)" class="custom-select flex-grow bg-transparent text-white border-none pr-8 py-1.5 text-sm font-bold outline-none"></select>
             </div>
-            <button onclick="toggleConfig()" class="flex-shrink-0 p-2.5 bg-white/20 text-white rounded-lg active:scale-95 border border-white/10">
+            <button onclick="toggleConfig()" class="p-2.5 bg-white/20 text-white rounded-lg border border-white/10 active:scale-95">
                 <i data-lucide="settings-2" size="18"></i>
             </button>
         </div>
     </header>
 
-    <!-- 欄位設定 -->
+    <!-- 彈出式欄位設定面板 -->
     <div id="config-drawer" class="fixed inset-0 z-50 pointer-events-none transition-all duration-300 opacity-0">
         <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="toggleConfig()"></div>
-        <div class="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl p-6 transition-transform translate-y-full pointer-events-auto shadow-2xl">
-            <div class="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6"></div>
-            <h2 class="text-xl font-bold flex items-center gap-2 mb-6"><i data-lucide="sliders" class="text-indigo-600"></i> 欄位對應</h2>
-            <div class="space-y-4 max-h-[50vh] overflow-y-auto pr-1">
-                <div class="grid grid-cols-1 gap-4">
-                    <div class="space-y-1"><label class="text-xs font-black text-slate-400">年份</label><select id="field-year" onchange="updateMapping()" class="w-full p-3 bg-slate-50 rounded-xl border-2 border-slate-100 font-bold outline-none"></select></div>
-                    <div class="space-y-1"><label class="text-xs font-black text-slate-400">標題</label><select id="field-title" onchange="updateMapping()" class="w-full p-3 bg-slate-50 rounded-xl border-2 border-slate-100 font-bold outline-none"></select></div>
-                    <div class="space-y-1"><label class="text-xs font-black text-slate-400">分類</label><select id="field-category" onchange="updateMapping()" class="w-full p-3 bg-slate-50 rounded-xl border-2 border-slate-100 font-bold outline-none"></select></div>
-                    <div class="space-y-1"><label class="text-xs font-black text-slate-400">內容摘要</label><select id="field-summary" onchange="updateMapping()" class="w-full p-3 bg-slate-50 rounded-xl border-2 border-slate-100 font-bold outline-none"></select></div>
+        <div class="absolute bottom-0 left-0 right-0 bg-white rounded-t-[2.5rem] p-6 transition-transform translate-y-full pointer-events-auto shadow-2xl max-h-[85vh] flex flex-col">
+            <div class="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6 shrink-0"></div>
+            
+            <h2 class="text-xl font-black flex items-center gap-2 mb-6 shrink-0">
+                <i data-lucide="sliders" class="text-indigo-600"></i> 欄位顯示對應
+            </h2>
+            
+            <div class="overflow-y-auto pr-1 flex-grow space-y-6">
+                <div class="space-y-2">
+                    <label class="text-xs font-black text-slate-400 uppercase tracking-widest">1. 標籤欄位 (單選 - 用於分類)</label>
+                    <select id="field-tag" class="w-full p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 font-bold outline-none focus:border-indigo-500 transition-colors"></select>
+                </div>
+                <div class="space-y-2">
+                    <label class="text-xs font-black text-slate-400 uppercase tracking-widest">2. 項目欄位 (單選 - 用於標題)</label>
+                    <select id="field-title" class="w-full p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 font-bold outline-none focus:border-indigo-500 transition-colors"></select>
+                </div>
+                <div class="space-y-2">
+                    <label class="text-xs font-black text-slate-400 uppercase tracking-widest">3. 內容詳情 (複選 - 展開後羅列)</label>
+                    <div id="content-selection-group" class="grid grid-cols-2 gap-2"></div>
                 </div>
             </div>
-            <button onclick="toggleConfig()" class="w-full mt-6 py-4 bg-indigo-600 text-white rounded-2xl font-black text-lg shadow-lg active:scale-95">套用設定</button>
+            <button onclick="applyNewMapping()" class="w-full mt-6 py-4 bg-indigo-600 text-white rounded-2xl font-black text-lg shadow-lg active:scale-95 shrink-0">確認套用</button>
         </div>
     </div>
 
     <main class="px-3 pt-3 pb-32">
-        <!-- 搜尋與過濾 -->
-        <div class="sticky top-[115px] z-30 bg-slate-50/95 backdrop-blur-md pb-2">
-            <div class="relative mb-2">
-                <i data-lucide="search" onclick="captureKeyword()" class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-indigo-600" size="20"></i>
-                <input type="text" id="searchInput" oninput="render()" onkeydown="if(event.key==='Enter') captureKeyword()" placeholder="搜尋關鍵字，Enter 存入口袋" 
-                       class="w-full pl-11 pr-4 py-3 rounded-2xl border-none shadow-sm focus:ring-2 focus:ring-indigo-500 bg-white text-base">
+        <div class="sticky top-[115px] z-30 bg-slate-50/95 backdrop-blur-md pb-2 space-y-3">
+            <!-- 搜尋框區塊 -->
+            <div class="relative group">
+                <input type="text" id="searchInput" oninput="render()" onkeydown="handleSearchKey(event)" placeholder="搜尋關鍵字..." 
+                       class="w-full px-5 py-3 rounded-2xl border-none shadow-sm focus:ring-2 focus:ring-indigo-500 bg-white text-base">
+                <button onclick="saveKeyword()" title="存入口袋" class="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-indigo-400 hover:text-indigo-600 transition-colors">
+                    <i data-lucide="plus-circle" size="20"></i>
+                </button>
             </div>
 
-            <!-- 關鍵字口袋區域 -->
-            <div id="keyword-pocket" class="flex flex-wrap gap-1.5 mb-2 empty:hidden"></div>
+            <!-- 關鍵字口袋 -->
+            <div id="keyword-pocket" class="hidden flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+                <div class="flex-shrink-0 text-[10px] font-black text-indigo-400 uppercase bg-indigo-50 px-2 py-1 rounded-md">口袋:</div>
+                <div id="pocket-list" class="flex gap-2"></div>
+            </div>
 
-            <div id="dynamic-filters" class="flex gap-1.5 overflow-x-auto no-scrollbar py-1 border-t border-slate-100 mt-1 pt-2"></div>
+            <!-- 分類過濾按鈕 -->
+            <div id="dynamic-filters" class="flex gap-1.5 overflow-x-auto no-scrollbar py-1"></div>
             
+            <!-- 統計與展開控制 -->
             <div class="flex items-center justify-between mt-2">
-                <!-- 統計區：符合筆數 / 總筆數 -->
                 <div class="text-[12px] font-bold text-slate-500 bg-white px-3 py-1.5 rounded-full border border-slate-200 shadow-sm flex items-center gap-1.5">
                     <i data-lucide="layers" size="14" class="text-indigo-500"></i> 符合 
-                    <span id="stat-count" class="text-indigo-600 font-black mx-0.5">0</span> / 
-                    <span id="stat-total" class="text-slate-400 mx-0.5">0</span> 筆
+                    <span id="stat-count" class="text-indigo-600 font-black mx-0.5">0</span> 筆
                 </div>
-                <button onclick="toggleAllExpand()" id="expandAllBtn" class="text-[12px] font-black text-indigo-700 bg-indigo-50 px-4 py-1.5 rounded-full flex items-center gap-1.5 active:scale-95 border border-indigo-100">
+                <button onclick="toggleAllExpand()" id="expandAllBtn" class="text-[12px] font-black text-indigo-700 bg-indigo-50 px-4 py-1.5 rounded-full flex items-center gap-1.5 border border-indigo-100">
                     <i data-lucide="maximize-2" size="14"></i> 全部展開
                 </button>
             </div>
         </div>
 
-        <div id="render-list" class="space-y-3 mt-4"></div>
+        <div id="render-list" class="space-y-4 mt-4"></div>
     </main>
 
     <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" class="hidden">
 
-    <div id="toast">
-        <div class="bg-slate-900 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 text-sm font-bold">
-            <i id="toast-icon" data-lucide="info" size="18"></i>
-            <span id="toast-msg"></span>
-        </div>
-    </div>
-
     <script>
         let fullWorkbook = null, rawData = [], headers = [];
-        let mapping = { year: 0, title: 1, category: 2, summary: 3 };
-        let selectedCategories = new Set(), expandedItems = new Set();
-        let pocketKeywords = new Set(); 
+        let selectedTagIndex = 0;
+        let selectedTitleIndex = 1;
+        let selectedContentIndices = [];
+        let selectedCategories = new Set();
+        let expandedItems = new Set();
+        let savedKeywords = JSON.parse(localStorage.getItem('explorer_saved_keywords') || '[]');
 
         function toggleConfig() {
             const d = document.getElementById('config-drawer');
@@ -158,35 +175,51 @@
             d.querySelector('.absolute.bottom-0').classList.toggle('translate-y-full', isOpen);
         }
 
-        function showToast(msg, icon = "info") {
-            const t = document.getElementById('toast');
-            document.getElementById('toast-msg').innerText = msg;
-            document.getElementById('toast-icon').setAttribute('data-lucide', icon);
-            lucide.createIcons();
-            t.classList.add('show');
-            setTimeout(() => t.classList.remove('show'), 2000);
+        function handleSearchKey(e) {
+            if (e.key === 'Enter') saveKeyword();
         }
 
-        function captureKeyword() {
+        function saveKeyword() {
             const input = document.getElementById('searchInput');
-            const val = input.value.trim();
-            if (val && !pocketKeywords.has(val)) {
-                pocketKeywords.add(val);
-                render();
+            const word = input.value.trim();
+            if (word && !savedKeywords.includes(word)) {
+                savedKeywords.unshift(word);
+                if (savedKeywords.length > 15) savedKeywords.pop();
+                localStorage.setItem('explorer_saved_keywords', JSON.stringify(savedKeywords));
+                updatePocketUI();
             }
         }
 
-        function applyKeyword(val) {
+        function deleteKeyword(e, word) {
+            e.stopPropagation();
+            savedKeywords = savedKeywords.filter(w => w !== word);
+            localStorage.setItem('explorer_saved_keywords', JSON.stringify(savedKeywords));
+            updatePocketUI();
+        }
+
+        function applyPocketSearch(word) {
             const input = document.getElementById('searchInput');
-            input.value = val;
-            input.focus();
+            input.value = word;
             render();
         }
 
-        function removeKeyword(event, val) {
-            event.stopPropagation();
-            pocketKeywords.delete(val);
-            render();
+        function updatePocketUI() {
+            const container = document.getElementById('keyword-pocket');
+            const list = document.getElementById('pocket-list');
+            if (savedKeywords.length === 0) {
+                container.classList.add('hidden');
+                return;
+            }
+            container.classList.remove('hidden');
+            list.innerHTML = savedKeywords.map(word => `
+                <div onclick="applyPocketSearch('${word}')" class="flex items-center bg-white border border-slate-200 rounded-full pl-3 pr-1 py-1 text-xs font-bold text-slate-600 hover:border-indigo-400 hover:text-indigo-600 transition-all cursor-pointer shadow-sm active:scale-95 group">
+                    <span class="mr-1">${word}</span>
+                    <button onclick="deleteKeyword(event, '${word}')" class="p-1 hover:bg-slate-100 rounded-full text-slate-300 hover:text-red-500 transition-colors">
+                        <i data-lucide="x" size="12"></i>
+                    </button>
+                </div>
+            `).join('');
+            lucide.createIcons();
         }
 
         document.getElementById('fileInput').addEventListener('change', e => {
@@ -198,9 +231,9 @@
                 fullWorkbook = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
                 const sheets = fullWorkbook.SheetNames;
                 document.getElementById('control-bar').classList.remove('hidden');
-                document.getElementById('sheet-dropdown').innerHTML = sheets.map(s => `<option value="${s}">${s}</option>`).join('');
+                const dropdown = document.getElementById('sheet-dropdown');
+                dropdown.innerHTML = sheets.map(s => `<option value="${s}">${s}</option>`).join('');
                 loadSheetData(sheets[0]);
-                showToast("檔案讀取完成", "check-circle");
             };
             r.readAsArrayBuffer(f);
         });
@@ -211,24 +244,37 @@
             if (rows.length < 1) return;
             headers = rows[0].map(h => (h || "未命名").toString());
             rawData = rows.slice(1).filter(r => r.some(c => c !== ""));
-            
-            ['field-year', 'field-title', 'field-category', 'field-summary'].forEach((id, i) => {
-                const el = document.getElementById(id);
-                el.innerHTML = headers.map((h, idx) => `<option value="${idx}" ${idx === i ? 'selected' : ''}>${h}</option>`).join('');
-            });
-            updateMapping();
+            document.getElementById('field-tag').innerHTML = headers.map((h, i) => `<option value="${i}">${h}</option>`).join('');
+            document.getElementById('field-title').innerHTML = headers.map((h, i) => `<option value="${i}" ${i===1?'selected':''}>${h}</option>`).join('');
+            document.getElementById('content-selection-group').innerHTML = headers.map((h, i) => `
+                <div class="relative">
+                    <input type="checkbox" id="chk-${i}" value="${i}" class="checkbox-item hidden" onchange="handleContentSelect(this)">
+                    <label for="chk-${i}" class="flex items-center justify-center p-3 rounded-xl border-2 border-slate-100 text-xs font-bold cursor-pointer transition-all truncate">
+                        ${h}
+                    </label>
+                </div>
+            `).join('');
+            selectedContentIndices = headers.map((_, i) => i);
+            headers.forEach((_, i) => document.getElementById(`chk-${i}`).checked = true);
+            applyNewMapping();
         }
 
-        function updateMapping() {
-            mapping = {
-                year: parseInt(document.getElementById('field-year').value),
-                title: parseInt(document.getElementById('field-title').value),
-                category: parseInt(document.getElementById('field-category').value),
-                summary: parseInt(document.getElementById('field-summary').value)
-            };
-            const cats = [...new Set(rawData.map(r => r[mapping.category]?.toString().trim()))].filter(Boolean);
+        function handleContentSelect(el) {
+            const idx = parseInt(el.value);
+            if (el.checked) {
+                if (!selectedContentIndices.includes(idx)) selectedContentIndices.push(idx);
+            } else {
+                selectedContentIndices = selectedContentIndices.filter(i => i !== idx);
+            }
+        }
+
+        function applyNewMapping() {
+            selectedTagIndex = parseInt(document.getElementById('field-tag').value);
+            selectedTitleIndex = parseInt(document.getElementById('field-title').value);
+            const cats = [...new Set(rawData.map(r => r[selectedTagIndex]?.toString().trim()))].filter(Boolean);
             selectedCategories = new Set(cats);
             expandedItems.clear();
+            if (!document.getElementById('config-drawer').classList.contains('opacity-0')) toggleConfig();
             render();
         }
 
@@ -238,7 +284,14 @@
                 expandedItems.clear();
                 btn.innerHTML = `<i data-lucide="maximize-2" size="14"></i> 全部展開`;
             } else {
-                rawData.forEach((_, i) => expandedItems.add(`row-${i}`));
+                const currentSearch = document.getElementById('searchInput').value.toLowerCase();
+                rawData.forEach((r, i) => {
+                    const tag = r[selectedTagIndex]?.toString().trim();
+                    const contentText = r.join(' ').toLowerCase();
+                    if (selectedCategories.has(tag) && contentText.includes(currentSearch)) {
+                        expandedItems.add(`row-${i}`);
+                    }
+                });
                 btn.innerHTML = `<i data-lucide="minimize-2" size="14"></i> 全部收合`;
             }
             render();
@@ -247,68 +300,65 @@
         function render() {
             const currentSearch = document.getElementById('searchInput').value.toLowerCase();
             const list = document.getElementById('render-list');
-            
-            // 渲染關鍵字口袋
-            document.getElementById('keyword-pocket').innerHTML = Array.from(pocketKeywords).map(k => {
-                const isActive = currentSearch === k.toLowerCase();
-                return `
-                <div onclick="applyKeyword('${k}')" 
-                     class="pocket-btn flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black cursor-pointer transition-all animate-in fade-in zoom-in duration-200 shadow-sm border ${
-                    isActive ? 'bg-indigo-600 text-white border-indigo-700 ring-2 ring-indigo-200' : 'bg-white text-indigo-700 border-indigo-200'
-                }">
-                    <span class="max-w-[100px] truncate">${k}</span>
-                    <button onclick="removeKeyword(event, '${k}')" class="p-0.5 hover:bg-black/10 rounded-full transition-colors">
-                        <i data-lucide="x" size="12"></i>
-                    </button>
-                </div>
-            `}).join('');
 
-            // 渲染分類篩選
             const catStats = {};
             rawData.forEach(r => {
-                const c = r[mapping.category]?.toString().trim();
+                const c = r[selectedTagIndex]?.toString().trim();
                 if(c) catStats[c] = (catStats[c] || 0) + 1;
             });
             document.getElementById('dynamic-filters').innerHTML = Object.keys(catStats).sort().map(c => `
                 <button onclick="selectedCategories.has('${c}') ? selectedCategories.delete('${c}') : selectedCategories.add('${c}');render()" 
                         class="flex-shrink-0 px-4 py-1.5 rounded-full text-xs font-black border transition-all ${
-                    selectedCategories.has(c) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-500 border-slate-200'
+                    selectedCategories.has(c) ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-slate-500 border-slate-200'
                 }">${c} <span class="ml-1 opacity-60">${catStats[c]}</span></button>
             `).join('');
 
-            const filtered = rawData.filter((r, i) => {
-                const c = r[mapping.category]?.toString().trim();
-                const content = r.join(' ').toLowerCase();
-                if (!selectedCategories.has(c)) return false;
-                if (currentSearch && !content.includes(currentSearch)) return false;
+            const filtered = rawData.filter((r) => {
+                const tag = r[selectedTagIndex]?.toString().trim();
+                const contentText = r.join(' ').toLowerCase();
+                if (!selectedCategories.has(tag)) return false;
+                if (currentSearch && !contentText.includes(currentSearch)) return false;
                 return true;
             });
 
-            // 更新統計數：符合 / 全部
             document.getElementById('stat-count').innerText = filtered.length;
-            document.getElementById('stat-total').innerText = rawData.length;
+
+            if (filtered.length === 0) {
+                list.innerHTML = `<div class="text-center py-20 text-slate-300 font-bold">沒有符合搜尋條件的資料</div>`;
+                return;
+            }
 
             list.innerHTML = filtered.map((r, i) => {
-                const id = `row-${i}`, open = expandedItems.has(id);
+                const originalIdx = rawData.indexOf(r);
+                const rowId = `row-${originalIdx}`, open = expandedItems.has(rowId);
+                
+                // 核心更新：對齊且加大字體，使用 HR 分隔
+                const contentHtml = selectedContentIndices.map(idx => `
+                    <div class="content-row">
+                        <div class="content-prefix">${headers[idx]}</div>
+                        <div class="content-text">${r[idx] || '<span class="text-slate-300 italic">無資料</span>'}</div>
+                    </div>
+                    <hr class="content-divider">
+                `).join('');
+
                 return `
-                    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden transition-all active:scale-[0.99]">
-                        <div onclick="expandedItems.has('${id}') ? expandedItems.delete('${id}') : expandedItems.add('${id}');render()" 
-                             class="p-4 flex gap-4 items-center cursor-pointer">
-                            <div class="flex flex-col items-start gap-1 w-16 shrink-0">
-                                <div class="text-[20px] font-black text-slate-300 italic leading-none">${r[mapping.year] || ''}</div>
-                                <span class="text-[9px] font-black text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded uppercase tracking-tighter whitespace-nowrap">${r[mapping.category]}</span>
+                    <div class="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden transition-all">
+                        <div onclick="expandedItems.has('${rowId}') ? expandedItems.delete('${rowId}') : expandedItems.add('${rowId}');render()" 
+                             class="p-5 flex gap-4 items-center cursor-pointer hover:bg-slate-50/50 transition-colors">
+                            <div class="flex-shrink-0">
+                                <span class="text-[10px] font-black text-indigo-500 bg-indigo-50 px-2 py-1 rounded-md border border-indigo-100 uppercase tracking-tighter">
+                                    ${r[selectedTagIndex] || '未分類'}
+                                </span>
                             </div>
                             <div class="flex-grow min-w-0">
-                                <h3 class="font-bold text-slate-800 text-base leading-tight">${r[mapping.title]}</h3>
+                                <h3 class="font-black text-slate-800 text-lg truncate">${r[selectedTitleIndex] || '未命名項目'}</h3>
                             </div>
-                            <i data-lucide="chevron-down" size="18" class="text-slate-300 transition-transform duration-300 ${open ? 'rotate-180' : ''}"></i>
+                            <i data-lucide="chevron-down" size="20" class="text-slate-300 transition-transform duration-300 ${open ? 'rotate-180' : ''}"></i>
                         </div>
                         <div class="details-wrapper ${open ? 'details-open' : ''}">
                             <div class="details-inner">
-                                <div class="px-4 pb-4">
-                                    <div class="border-t border-slate-50 pt-3 text-sm text-slate-600 leading-relaxed">
-                                        ${r[mapping.summary] || '<span class="italic text-slate-400 text-xs">無詳細描述內容</span>'}
-                                    </div>
+                                <div class="px-5 pb-6 pt-2 border-t border-slate-50/50">
+                                    <div class="flex flex-col">${contentHtml}</div>
                                 </div>
                             </div>
                         </div>
@@ -318,7 +368,10 @@
             lucide.createIcons();
         }
 
-        window.onload = () => lucide.createIcons();
+        window.onload = () => {
+            lucide.createIcons();
+            updatePocketUI();
+        };
     </script>
 </body>
 </html>
