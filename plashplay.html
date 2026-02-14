@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Plash YouTube Controller - AdFree Edition</title>
+    <title>Plash YouTube Controller - Interaction Aware</title>
     <style>
         :root {
-            --accent-color: #34c759; /* 改為綠色代表無廣告 */
+            --accent-color: #34c759;
             --panel-bg: rgba(20, 20, 20, 0.9);
             --text-color: #ffffff;
         }
@@ -39,11 +39,10 @@
             width: 100vw;
             height: 100vh;
             border: none;
-            transform: scale(1.15); /* 裁切邊緣 */
+            transform: scale(1.15);
             transform-origin: center center;
         }
 
-        /* UI 圖層 */
         #ui-layer {
             position: absolute;
             bottom: 40px;
@@ -57,7 +56,7 @@
         #clock { font-size: 5rem; font-weight: 200; }
         #date { font-size: 1rem; opacity: 0.6; letter-spacing: 2px; }
 
-        /* 設定按鈕 */
+        /* 設定按鈕 - 初始狀態為隱藏 */
         #settings-toggle {
             position: absolute;
             bottom: 30px;
@@ -73,10 +72,19 @@
             cursor: pointer;
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255,255,255,0.1);
+            transition: opacity 0.4s ease, transform 0.3s ease;
+            opacity: 0; /* 預設完全隱藏 */
+            pointer-events: none;
         }
+        
+        /* 當 active 類別存在時顯示 */
+        #settings-toggle.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
         #settings-toggle svg { fill: white; width: 24px; height: 24px; }
 
-        /* 控制面板 */
         #control-panel {
             position: absolute;
             bottom: 85px;
@@ -136,7 +144,7 @@
     </div>
 
     <div id="control-panel">
-        <h3 style="margin-bottom: 15px;">去廣告專業版設定</h3>
+        <h3 style="margin-bottom: 15px;">互動感應設定</h3>
         
         <div class="form-group">
             <label>影片 ID</label>
@@ -156,23 +164,16 @@
             </div>
         </div>
 
-        <button onclick="applySettings()">儲存並更新桌布</button>
+        <button onclick="applySettings()">儲存並更新</button>
         
         <div class="hint">
-            <b>💡 提示：</b><br>
-            1. 若「無廣告模式」載入慢，請切回標準模式並在 <b>Safari 登入 Premium 帳號</b>。<br>
-            2. 代理模式下，循環秒數可能會有 1-2 秒誤差。
+            <b>✨ 互動偵測已啟用：</b><br>
+            當開啟 Plash <b>Browsing Mode</b> 時，按鈕會自動顯示；關閉模式後按鈕將徹底隱藏，不干擾視覺。
         </div>
     </div>
 
     <script>
-        let config = {
-            id: 'WIl1cufYYF0',
-            start: 0,
-            end: 0,
-            adFree: false
-        };
-
+        let config = { id: 'WIl1cufYYF0', start: 0, end: 0, adFree: false };
         const saved = localStorage.getItem('plash_yt_adfree_config');
         if (saved) config = JSON.parse(saved);
 
@@ -181,25 +182,20 @@
         document.getElementById('inputEnd').value = config.end;
         document.getElementById('checkAdFree').checked = config.adFree;
 
-        let player; // YouTube 原生 Player
+        let player; 
         let loopTimer;
+        let isPanelActive = false;
 
-        // 初始化播放器
         function loadPlayer() {
             const container = document.getElementById('video-container');
             container.innerHTML = '<div id="player-target"></div>';
-            
             if (config.adFree) {
-                // 使用 Invidious 代理 (無廣告嵌入)
-                // 使用一個相對穩定的實例，若失效可更換為 yewtu.be 或 inv.vern.cc
                 const proxyUrl = `https://inv.tux.rs/embed/${config.id}?autoplay=1&loop=1&t=${config.start}&mute=1`;
                 container.innerHTML = `<iframe src="${proxyUrl}" allow="autoplay"></iframe>`;
                 setupProxyLoop();
             } else {
-                // 使用 YouTube 官方 API
-                if (window.YT && YT.Player) {
-                    initYoutubePlayer();
-                } else {
+                if (window.YT && YT.Player) { initYoutubePlayer(); } 
+                else {
                     const tag = document.createElement('script');
                     tag.src = "https://www.youtube.com/iframe_api";
                     document.body.appendChild(tag);
@@ -234,7 +230,6 @@
             }, 500);
         }
 
-        // 代理模式下的簡易循環處理
         function setupProxyLoop() {
             if (loopTimer) clearInterval(loopTimer);
             if (config.end > 0) {
@@ -243,14 +238,17 @@
             }
         }
 
-        function togglePanel() { document.getElementById('control-panel').classList.toggle('active'); }
+        function togglePanel() { 
+            const panel = document.getElementById('control-panel');
+            isPanelActive = panel.classList.toggle('active');
+            if (!isPanelActive) resetInteractionState();
+        }
 
         function applySettings() {
             config.id = document.getElementById('inputId').value.trim();
             config.start = parseInt(document.getElementById('inputStart').value) || 0;
             config.end = parseInt(document.getElementById('inputEnd').value) || 0;
             config.adFree = document.getElementById('checkAdFree').checked;
-            
             localStorage.setItem('plash_yt_adfree_config', JSON.stringify(config));
             loadPlayer();
             togglePanel();
@@ -260,6 +258,26 @@
             const now = new Date();
             document.getElementById('clock').textContent = now.toLocaleTimeString('zh-TW', { hour12: false, hour: '2-digit', minute: '2-digit' });
             document.getElementById('date').textContent = now.toLocaleDateString('zh-TW', { month: 'long', day: 'numeric', weekday: 'short' });
+        }
+
+        // --- 改進後的自動隱藏機制 (依據 Browsing Mode 交互狀態) ---
+        const toggleBtn = document.getElementById('settings-toggle');
+
+        function showUI() { toggleBtn.classList.add('visible'); }
+        function hideUI() { if (!isPanelActive) toggleBtn.classList.remove('visible'); }
+
+        // 當滑鼠移動或進入網頁，代表正處於可交互的 Browsing Mode
+        window.addEventListener('mouseenter', showUI);
+        window.addEventListener('mousemove', showUI);
+        window.addEventListener('focus', showUI);
+
+        // 當滑鼠離開或視窗失去焦點 (關閉 Browsing Mode 時會發生)，隱藏按鈕
+        window.addEventListener('mouseleave', hideUI);
+        window.addEventListener('blur', hideUI);
+
+        function resetInteractionState() {
+            // 初始檢查：如果沒有滑鼠事件，按鈕不應該顯示
+            hideUI();
         }
 
         setInterval(updateClock, 1000);
