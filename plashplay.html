@@ -3,8 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Plash YouTube Container - Fixed</title>
+    <title>Plash YouTube Controller - AdFree Edition</title>
     <style>
+        :root {
+            --accent-color: #34c759; /* 改為綠色代表無廣告 */
+            --panel-bg: rgba(20, 20, 20, 0.9);
+            --text-color: #ffffff;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -16,7 +22,7 @@
             height: 100%;
             overflow: hidden;
             background-color: #000;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
         }
 
         #video-container {
@@ -26,137 +32,239 @@
             width: 100%;
             height: 100%;
             z-index: 1;
-            pointer-events: none; 
+            pointer-events: none;
         }
 
         iframe {
             width: 100vw;
             height: 100vh;
             border: none;
-            /* 縮放以隱藏 UI，並確保填滿 */
-            transform: scale(1.15);
+            transform: scale(1.15); /* 裁切邊緣 */
             transform-origin: center center;
         }
 
+        /* UI 圖層 */
         #ui-layer {
             position: absolute;
             bottom: 40px;
-            left: 40px;
-            z-index: 10;
+            right: 40px;
+            z-index: 5;
             color: rgba(255, 255, 255, 0.8);
             text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
             pointer-events: none;
+            text-align: right;
         }
+        #clock { font-size: 5rem; font-weight: 200; }
+        #date { font-size: 1rem; opacity: 0.6; letter-spacing: 2px; }
 
-        #clock {
-            font-size: 4rem;
-            font-weight: 200;
-            letter-spacing: -2px;
-        }
-
-        #status {
-            font-size: 0.9rem;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            opacity: 0.6;
-        }
-
-        /* 錯誤訊息提示 */
-        #error-msg {
-            display: none;
+        /* 設定按鈕 */
+        #settings-toggle {
             position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white;
-            text-align: center;
-            z-index: 20;
-            background: rgba(255,0,0,0.2);
-            padding: 20px;
-            border-radius: 10px;
-            backdrop-filter: blur(5px);
+            bottom: 30px;
+            left: 30px;
+            z-index: 100;
+            width: 44px;
+            height: 44px;
+            background: var(--panel-bg);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
         }
+        #settings-toggle svg { fill: white; width: 24px; height: 24px; }
+
+        /* 控制面板 */
+        #control-panel {
+            position: absolute;
+            bottom: 85px;
+            left: 30px;
+            width: 300px;
+            background: var(--panel-bg);
+            backdrop-filter: blur(20px);
+            border-radius: 16px;
+            padding: 20px;
+            z-index: 99;
+            color: white;
+            display: none;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        #control-panel.active { display: block; }
+
+        .form-group { margin-bottom: 12px; }
+        label { display: block; font-size: 0.7rem; color: #aaa; margin-bottom: 4px; text-transform: uppercase; }
+        input[type="text"], input[type="number"], select {
+            width: 100%;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            padding: 8px;
+            border-radius: 6px;
+            color: white;
+        }
+        .toggle-group { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding: 10px; background: rgba(52, 199, 89, 0.1); border-radius: 8px; }
+        
+        button {
+            width: 100%;
+            padding: 12px;
+            background: var(--accent-color);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        .hint { font-size: 0.65rem; color: #888; margin-top: 10px; line-height: 1.4; }
     </style>
 </head>
 <body>
 
-    <div id="error-msg">
-        <h3>播放器載入失敗</h3>
-        <p>建議將此檔案上傳至 GitHub Pages 或使用本地伺服器開啟</p>
-    </div>
-
     <div id="video-container">
-        <div id="player"></div>
+        <div id="player-target"></div>
     </div>
 
     <div id="ui-layer">
-        <div id="status">Ambient Mode • Live</div>
+        <div id="date">-- --</div>
         <div id="clock">00:00</div>
     </div>
 
+    <div id="settings-toggle" onclick="togglePanel()">
+        <svg viewBox="0 0 24 24"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.85,9.48l2.03,1.58C4.84,11.36,4.81,11.69,4.81,12c0,0.31,0.02,0.65,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
+    </div>
+
+    <div id="control-panel">
+        <h3 style="margin-bottom: 15px;">去廣告專業版設定</h3>
+        
+        <div class="form-group">
+            <label>影片 ID</label>
+            <input type="text" id="inputId">
+        </div>
+
+        <div class="toggle-group">
+            <input type="checkbox" id="checkAdFree">
+            <label style="margin:0; font-weight:bold; color:#34c759;" for="checkAdFree">無廣告模式 (Proxy)</label>
+        </div>
+
+        <div class="form-group" style="margin-top:15px;">
+            <label>循環範圍 (秒)</label>
+            <div style="display:flex; gap:10px;">
+                <input type="number" id="inputStart" placeholder="開始">
+                <input type="number" id="inputEnd" placeholder="結束">
+            </div>
+        </div>
+
+        <button onclick="applySettings()">儲存並更新桌布</button>
+        
+        <div class="hint">
+            <b>💡 提示：</b><br>
+            1. 若「無廣告模式」載入慢，請切回標準模式並在 <b>Safari 登入 Premium 帳號</b>。<br>
+            2. 代理模式下，循環秒數可能會有 1-2 秒誤差。
+        </div>
+    </div>
+
     <script>
-        const VIDEO_ID = 'WIl1cufYYF0'; 
+        let config = {
+            id: 'WIl1cufYYF0',
+            start: 0,
+            end: 0,
+            adFree: false
+        };
 
-        // 嘗試自動獲取當前網址作為 origin，這是解決錯誤 153 的關鍵
-        const currentOrigin = window.location.origin === 'null' ? 'https://www.youtube.com' : window.location.origin;
+        const saved = localStorage.getItem('plash_yt_adfree_config');
+        if (saved) config = JSON.parse(saved);
 
-        const tag = document.createElement('script');
-        tag.src = "https://www.youtube.com/iframe_api";
-        const firstScriptTag = document.getElementsByTagName('script')[0];
-        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+        document.getElementById('inputId').value = config.id;
+        document.getElementById('inputStart').value = config.start;
+        document.getElementById('inputEnd').value = config.end;
+        document.getElementById('checkAdFree').checked = config.adFree;
 
-        let player;
+        let player; // YouTube 原生 Player
+        let loopTimer;
 
-        function onYouTubeIframeAPIReady() {
-            player = new YT.Player('player', {
-                videoId: VIDEO_ID,
-                playerVars: {
-                    'autoplay': 1,
-                    'controls': 0,
-                    'loop': 1,
-                    'playlist': VIDEO_ID,
-                    'mute': 1,
-                    'modestbranding': 1,
-                    'rel': 0,
-                    'enablejsapi': 1,
-                    'origin': currentOrigin // 顯式傳遞 origin
+        // 初始化播放器
+        function loadPlayer() {
+            const container = document.getElementById('video-container');
+            container.innerHTML = '<div id="player-target"></div>';
+            
+            if (config.adFree) {
+                // 使用 Invidious 代理 (無廣告嵌入)
+                // 使用一個相對穩定的實例，若失效可更換為 yewtu.be 或 inv.vern.cc
+                const proxyUrl = `https://inv.tux.rs/embed/${config.id}?autoplay=1&loop=1&t=${config.start}&mute=1`;
+                container.innerHTML = `<iframe src="${proxyUrl}" allow="autoplay"></iframe>`;
+                setupProxyLoop();
+            } else {
+                // 使用 YouTube 官方 API
+                if (window.YT && YT.Player) {
+                    initYoutubePlayer();
+                } else {
+                    const tag = document.createElement('script');
+                    tag.src = "https://www.youtube.com/iframe_api";
+                    document.body.appendChild(tag);
+                }
+            }
+        }
+
+        function initYoutubePlayer() {
+            player = new YT.Player('player-target', {
+                videoId: config.id,
+                playerVars: { 
+                    'autoplay': 1, 'controls': 0, 'mute': 1, 'loop': 1, 
+                    'playlist': config.id, 'origin': window.location.origin === 'null' ? 'https://www.youtube.com' : window.location.origin,
+                    'start': config.start
                 },
-                events: {
-                    'onReady': (event) => {
-                        event.target.playVideo();
-                    },
-                    'onError': (event) => {
-                        console.error("YouTube Player Error:", event.data);
-                        document.getElementById('error-msg').style.display = 'block';
-                    },
-                    'onStateChange': (event) => {
-                        if (event.data === YT.PlayerState.ENDED) {
-                            player.playVideo();
-                        }
-                    }
+                events: { 
+                    'onReady': (e) => { e.target.playVideo(); startLoopMonitor(); },
+                    'onStateChange': (e) => { if(e.data === YT.PlayerState.ENDED) player.seekTo(config.start); }
                 }
             });
         }
 
+        function onYouTubeIframeAPIReady() { initYoutubePlayer(); }
+
+        function startLoopMonitor() {
+            if (loopTimer) clearInterval(loopTimer);
+            loopTimer = setInterval(() => {
+                if (player && player.getCurrentTime) {
+                    const now = player.getCurrentTime();
+                    if (config.end > 0 && now >= config.end) player.seekTo(config.start);
+                }
+            }, 500);
+        }
+
+        // 代理模式下的簡易循環處理
+        function setupProxyLoop() {
+            if (loopTimer) clearInterval(loopTimer);
+            if (config.end > 0) {
+                const duration = (config.end - config.start) * 1000;
+                loopTimer = setInterval(() => { loadPlayer(); }, duration);
+            }
+        }
+
+        function togglePanel() { document.getElementById('control-panel').classList.toggle('active'); }
+
+        function applySettings() {
+            config.id = document.getElementById('inputId').value.trim();
+            config.start = parseInt(document.getElementById('inputStart').value) || 0;
+            config.end = parseInt(document.getElementById('inputEnd').value) || 0;
+            config.adFree = document.getElementById('checkAdFree').checked;
+            
+            localStorage.setItem('plash_yt_adfree_config', JSON.stringify(config));
+            loadPlayer();
+            togglePanel();
+        }
+
         function updateClock() {
             const now = new Date();
-            const h = String(now.getHours()).padStart(2, '0');
-            const m = String(now.getMinutes()).padStart(2, '0');
-            document.getElementById('clock').textContent = `${h}:${m}`;
+            document.getElementById('clock').textContent = now.toLocaleTimeString('zh-TW', { hour12: false, hour: '2-digit', minute: '2-digit' });
+            document.getElementById('date').textContent = now.toLocaleDateString('zh-TW', { month: 'long', day: 'numeric', weekday: 'short' });
         }
 
         setInterval(updateClock, 1000);
         updateClock();
-
-        window.addEventListener('keydown', (e) => {
-            if (e.key === 'm') {
-                if (player.isMuted()) {
-                    player.unMute();
-                } else {
-                    player.mute();
-                }
-            }
-        });
+        loadPlayer();
     </script>
 </body>
 </html>
