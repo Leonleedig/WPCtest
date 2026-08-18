@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>認知偏誤圖譜 (Cognitive Bias Codex)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap');
+        
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #000000;
+            color: #e2e8f0;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        #viz-container {
+            touch-action: none; 
+        }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(71, 85, 105, 0.6); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(100, 116, 139, 0.8); }
+
+        .node circle {
+            cursor: pointer;
+            stroke-width: 2px;
+            transition: transform 0.3s ease, fill 0.3s ease;
+        }
+        .node circle:hover {
+            transform: scale(1.5);
+            filter: drop-shadow(0 0 8px rgba(255,255,255,0.8));
+        }
+
+        .node text {
+            cursor: pointer;
+            font-size: 31.5px;
+            /* 顏色交由 JS 動態上色，與連接線同色 */
+            transition: all 0.3s ease;
+            text-shadow: 0 0 6px #000, 0 0 10px #000, 0 2px 5px rgba(0,0,0,0.9); 
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .node text:hover {
+            fill: #ffffff !important; /* 懸停時強制亮白 */
+            font-size: 39px; 
+            font-weight: 700;
+            text-shadow: 0 0 12px rgba(255,255,255,0.8), 0 0 20px rgba(0,0,0,1);
+        }
+
+        .link {
+            fill: none;
+            stroke-opacity: 0.85; /* 加強明亮度 */
+            stroke-width: 3.5px;  /* 加粗連接線 */
+        }
+
+        .center-brain {
+            filter: drop-shadow(0 0 25px rgba(255,255,255,0.2));
+            cursor: pointer;
+            pointer-events: auto;
+            transition: transform 0.3s ease;
+        }
+        .center-brain-group:hover .center-brain {
+            transform: scale(1.15);
+        }
+
+        #detail-panel {
+            position: fixed;
+            inset: 0;
+            z-index: 50;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            background-color: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        #detail-panel.panel-open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        #panel-content-box {
+            background: linear-gradient(145deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.95));
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+            border-radius: 24px;
+            width: 100%;
+            max-width: 800px;
+            max-height: 85vh;
+            display: flex;
+            flex-direction: column;
+            transform: translateY(20px) scale(0.95);
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        #detail-panel.panel-open #panel-content-box {
+            transform: translateY(0) scale(1);
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col text-slate-200 relative">
+
+    <!-- 主要視覺化畫布 (移除了原本左上角的 HTML 標題浮層) -->
+    <div class="flex-1 w-full h-full cursor-grab active:cursor-grabbing" id="viz-container"></div>
+
+    <div id="detail-panel">
+        <div id="panel-content-box" class="relative overflow-hidden">
+            <div id="panel-glow" class="absolute -top-32 -right-32 w-64 h-64 rounded-full blur-[80px] opacity-20 pointer-events-none"></div>
+            <div class="flex justify-between items-center p-6 border-b border-slate-700/50">
+                <div class="flex items-center gap-3">
+                    <div id="info-badge" class="px-3 py-1 rounded-full text-xs font-bold tracking-wider">分類標籤</div>
+                </div>
+                <button id="close-panel-btn" class="p-2 rounded-full bg-slate-800/50 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer">
+                    <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+            <div class="p-8 md:p-10 overflow-y-auto custom-scrollbar">
+                <h2 id="info-title" class="text-3xl md:text-4xl font-bold text-white mb-4 leading-tight tracking-wide">項目名稱</h2>
+                <div id="info-path" class="text-sm text-slate-400 mb-8 flex flex-wrap gap-2 items-center font-medium"></div>
+                <div id="info-content" class="text-slate-300 text-lg md:text-xl leading-relaxed space-y-6"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const colors = {
+            "太多資訊": "#60a5fa", 
+            "意義不足": "#fbbf24", 
+            "迅速行動": "#f43f5e", 
+            "該記住什麼": "#a855f7"  
+        };
+
+        // 重新排列陣列順序，使藍、紫位於右半部(0~180度)，紅、黃位於左半部(180~360度)
+        const treeData = {
+            name: "認知偏誤", type: "root", desc: "人類大腦為應對複雜世界所演化出的捷徑，但也因此產生判斷上的盲點。",
+            children: [
+                {
+                    name: "太多資訊 (Too Much Info)", shortName: "太多資訊", type: "category", desc: "大腦如何過濾海量資訊？世界上資訊太多了，我們的大腦沒有足夠的能力處理所有事情，因此我們被迫過濾掉絕大多數的資訊。",
+                    children: [
+                        {
+                            name: "近期與重複的事物", type: "subcategory", desc: "我們會注意到記憶中已被激發或經常重複的事物。",
+                            children: [
+                                { name: "可用性捷思", type: "bias", desc: "人們傾向根據記憶中較容易提取的資訊來評估事件發生的可能性。" },
+                                { name: "注意力偏誤", type: "bias", desc: "我們的感知會受到當下所關注的事物影響，而忽略其他資訊。" },
+                                { name: "單純曝光效應", type: "bias", desc: "人們會單純因為熟悉某個事物而產生好感。" },
+                                { name: "真理錯覺效應", type: "bias", desc: "認為重複越多次的事情就越真實。" }
+                            ]
+                        },
+                        {
+                            name: "奇異與強烈對比", type: "subcategory", desc: "奇異、有趣、視覺強烈或擬人化的事物，比平庸/無趣的事物更引人注目。",
+                            children: [
+                                { name: "雷斯多夫效應", type: "bias", desc: "在多個相似的項目中，最與眾不同的那個最容易被記住。" },
+                                { name: "幽默效應", type: "bias", desc: "幽默的事物比不幽默的事物更容易被記住。" },
+                                { name: "負面偏誤", type: "bias", desc: "對負面訊息的注意力遠大於正面訊息。" }
+                            ]
+                        },
+                        {
+                            name: "察覺事物變化", type: "subcategory", desc: "我們會注意到事物發生的變化。我們通常由事物的變化程度，而非絕對數值來評估價值。",
+                            children: [
+                                { name: "錨定效應", type: "bias", desc: "人們在做決策時，過度依賴最先取得的資訊，即使該資訊與決策無關。" },
+                                { name: "對比效應", type: "bias", desc: "當我們剛接觸到某個事物後，對下一個事物的感知會被放大或縮小。" },
+                                { name: "框架效應", type: "bias", desc: "同一個資訊，因為表達方式的不同，會導致人們產生不同的決策判斷。" }
+                            ]
+                        },
+                        {
+                            name: "證實既有信念", type: "subcategory", desc: "我們會被那些能證實自己既有信念的細節所吸引。",
+                            children: [
+                                { name: "確認偏誤", type: "bias", desc: "我們傾向於尋找、解釋和記住那些能證實我們先前信念的資訊。" },
+                                { name: "選擇性知覺", type: "bias", desc: "人們會根據自己的期望去詮釋訊息，忽略不符合期望的部分。" },
+                                { name: "購買後合理化", type: "bias", desc: "買了昂貴的東西後，會不斷尋找理由說服自己這個決定是正確的。" }
+                            ]
+                        },
+                        {
+                            name: "發現他人缺陷", type: "subcategory", desc: "我們總是更容易發現別人的缺點，卻忽略自己的盲點。",
+                            children: [
+                                { name: "偏見盲點", type: "bias", desc: "認為自己比其他人更不容易受到認知偏誤的影響。" },
+                                { name: "素樸實在論", type: "bias", desc: "相信自己看到的是客觀事實，而那些與自己意見不同的人都是受到偏見影響。" }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    name: "該記住什麼？ (What To Remember?)", shortName: "該記住什麼", type: "category", desc: "大腦如何決定要留下哪些記憶？大腦的儲存空間有限，只能記下最重要的資訊，以便未來使用。",
+                    children: [
+                        {
+                            name: "事後編輯與強化", type: "subcategory", desc: "我們會在事後編輯並強化某些特定的記憶。",
+                            children: [
+                                { name: "錯誤記憶", type: "bias", desc: "回憶起從未發生過的事情，或將發生的事情記錯。" },
+                                { name: "潛隱記憶", type: "bias", desc: "將別人曾經講過的點子，誤以為是自己原創的靈感。" },
+                                { name: "間距效應", type: "bias", desc: "分散學習的效果比集中學習的效果更好。" }
+                            ]
+                        },
+                        {
+                            name: "捨棄細節成概括", type: "subcategory", desc: "我們會捨棄具體的細節，以形成概括性的認知。",
+                            children: [
+                                { name: "內隱刻板印象", type: "bias", desc: "無意識中對特定群體持有的成見，影響我們的判斷和行為。" },
+                                { name: "衰退偏差", type: "bias", desc: "相較於正面的記憶，負面情緒的記憶消退得更快。" }
+                            ]
+                        },
+                        {
+                            name: "簡化為關鍵要素", type: "subcategory", desc: "我們會將事件和清單簡化為最關鍵的要素。",
+                            children: [
+                                { name: "峰終定律", type: "bias", desc: "對一段體驗的評價，取決於「最高潮」和「結尾」，忽略平均值。" },
+                                { name: "首因效應", type: "bias", desc: "最容易記住清單開頭的項目。" },
+                                { name: "近因效應", type: "bias", desc: "最容易記住清單結尾的項目。" }
+                            ]
+                        },
+                        {
+                            name: "根據體驗存記憶", type: "subcategory", desc: "我們會根據當初體驗事物的方式，用不同的形式來儲存記憶。",
+                            children: [
+                                { name: "舌尖現象", type: "bias", desc: "明明知道某個詞，卻偏偏在當下想不起來，只記得相關特徵。" },
+                                { name: "谷歌效應", type: "bias", desc: "傾向於忘記可以輕易在網路上搜尋到的資訊。" }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    name: "需迅速行動 (Need To Act Fast)", shortName: "迅速行動", type: "category", desc: "在時間壓力下，大腦如何做決定？時間和資訊都有限，但我們不能被癱瘓，必須快速採取行動以確保生存。",
+                    children: [
+                        {
+                            name: "自信與重要性", type: "subcategory", desc: "為了採取行動，我們必須相信自己能產生影響力，並認為自己做的事很重要。",
+                            children: [
+                                { name: "過度自信效應", type: "bias", desc: "過度相信自己判斷和決策的準確性。" },
+                                { name: "控制錯覺", type: "bias", desc: "人們相信自己能夠控制或影響不可控的事件結果。" },
+                                { name: "樂觀偏見", type: "bias", desc: "相信自己比別人更有可能經歷好事，且更不可能遇到壞事。" }
+                            ]
+                        },
+                        {
+                            name: "眼前與切身利益", type: "subcategory", desc: "為了保持專注，我們偏好眼前立即且與自己切身相關的事物。",
+                            children: [
+                                { name: "雙曲貼現", type: "bias", desc: "偏好獲得較小但即時的獎勵，不願等待較大但未來的獎勵。" },
+                                { name: "可辨識受害者", type: "bias", desc: "比起統計上大量的受害者，人們更願意去幫助一個具體、有故事的受害者。" }
+                            ]
+                        },
+                        {
+                            name: "完成已投入的事", type: "subcategory", desc: "為了把事做完，我們傾向於去完成那些已經投入了時間與精力的事情。",
+                            children: [
+                                { name: "沉沒成本謬誤", type: "bias", desc: "因為已經投入了不可回收的成本，而繼續堅持做一件不划算的事。" },
+                                { name: "IKEA效應", type: "bias", desc: "對於自己參與組裝或製作的物品，會賦予不成比例的高價值。" },
+                                { name: "損失趨避", type: "bias", desc: "失去某東西的痛苦，遠大於獲得同等價值東西的快樂。" }
+                            ]
+                        },
+                        {
+                            name: "保留自主避險", type: "subcategory", desc: "為了避免犯錯，我們致力於維持自主性與群體地位，並盡量避免做出不可逆的決定。",
+                            children: [
+                                { name: "現狀偏見", type: "bias", desc: "人們傾向於保持事情的現狀，認為改變現狀會帶來損失。" },
+                                { name: "逆火效應", type: "bias", desc: "當信念被相反的證據挑戰時，反而會更加固執地堅持原本的信念。" },
+                                { name: "從眾效應", type: "bias", desc: "個體傾向於模仿多數人的行為或觀念，以尋求歸屬感。" }
+                            ]
+                        },
+                        {
+                            name: "偏好簡單確定", type: "subcategory", desc: "相較於複雜且模糊的選擇，我們更偏好看似簡單且資訊完整的選項。",
+                            children: [
+                                { name: "模糊規避", type: "bias", desc: "傾向選擇機率已知的選項，避開機率未知的選項。" },
+                                { name: "零風險偏誤", type: "bias", desc: "偏好將微小的風險降為零，而非顯著降低較大風險的情況。" }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    name: "意義不足 (Not Enough Meaning)", shortName: "意義不足", type: "category", desc: "當資訊片段不全時，大腦如何腦補？世界充滿複雜和未知，但為了生存，我們必須在資訊不足的情況下賦予其意義。",
+                    children: [
+                        {
+                            name: "零星數據找規律", type: "subcategory", desc: "即使面對零星稀疏的數據，我們也傾向於從中尋找故事和規律。",
+                            children: [
+                                { name: "錯覺相關", type: "bias", desc: "錯誤地認為兩件不相關的事件之間存在關聯。" },
+                                { name: "賭徒謬誤", type: "bias", desc: "認為某個隨機事件在過去發生得比較頻繁，未來發生的機率就會降低。" },
+                                { name: "空想性錯視", type: "bias", desc: "大腦從隨機的圖形中看出有意義的影像，例如在雲朵中看到人臉。" }
+                            ]
+                        },
+                        {
+                            name: "刻板印象與腦補", type: "subcategory", desc: "我們會利用刻板印象、概括性認知和過往經驗來填補未知的特徵。",
+                            children: [
+                                { name: "光環效應", type: "bias", desc: "我們對一個人某個單一特徵的好感，會擴散到對其整體性格的正面評價。" },
+                                { name: "外群體同質性偏見", type: "bias", desc: "認為自己群體的人很多元，但其他群體的人都差不多。" },
+                                { name: "權威偏見", type: "bias", desc: "傾向於相信權威人士的意見，即使他們可能在該領域並不專業。" }
+                            ]
+                        },
+                        {
+                            name: "偏好熟悉事物", type: "subcategory", desc: "我們會把自己熟悉或喜愛的人事物，想像得比實際更好。",
+                            children: [
+                                { name: "非我所創症候群", type: "bias", desc: "排斥那些不是由自己發明或創造的想法或產品。" },
+                                { name: "啦啦隊效應", type: "bias", desc: "認為處在群體中的人，比單獨看時更有吸引力。" }
+                            ]
+                        },
+                        {
+                            name: "簡化機率與數字", type: "subcategory", desc: "我們會將機率和數字簡化，讓它們變得更容易思考。",
+                            children: [
+                                { name: "心理帳戶", type: "bias", desc: "把錢分門別類放在不同的「心理帳戶」中，採取不同的消費態度。" },
+                                { name: "倖存者偏差", type: "bias", desc: "只關注那些經歷某事後存活下來的人事物，卻忽略了那些沒有存活下來的。" }
+                            ]
+                        },
+                        {
+                            name: "自以為懂人心", type: "subcategory", desc: "我們總以為自己知道別人在想什麼。",
+                            children: [
+                                { name: "知識的詛咒", type: "bias", desc: "當掌握某種知識後，很難想像「不知道這件事的人」是什麼感覺。" },
+                                { name: "透明度錯覺", type: "bias", desc: "高估了別人能夠讀懂我們內心感受的能力。" }
+                            ]
+                        },
+                        {
+                            name: "投射過去與未來", type: "subcategory", desc: "我們會將當下的心態與假設，投射到過去和未來。",
+                            children: [
+                                { name: "後見之明偏誤", type: "bias", desc: "事情發生後，才覺得「我早就知道會這樣」（事後諸葛）。" },
+                                { name: "達克效應", type: "bias", desc: "能力欠缺的人會產生虛幻的優越感；能力強的人反而會低估自己。" },
+                                { name: "規劃謬誤", type: "bias", desc: "低估完成一項任務所需的時間、成本或風險。" }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        };
+
+        const container = document.getElementById('viz-container');
+        let width = container.clientWidth || window.innerWidth;
+        let height = container.clientHeight || window.innerHeight;
+
+        const virtualRadius = 1200; 
+        let i = 0;
+        const duration = 700;
+        
+        // ===== 佈局與縮放設定 =====
+        const svg = d3.select("#viz-container").append("svg")
+            .attr("width", "100%")
+            .attr("height", "100%")
+            .style("touch-action", "none"); 
+            
+        svg.append("rect")
+            .attr("width", "100%")
+            .attr("height", "100%")
+            .style("fill", "transparent")
+            .style("pointer-events", "all");
+
+        const g = svg.append("g");
+
+        const initialScale = Math.max(Math.min(width, height) / (virtualRadius * 2.2), 0.1);
+        const zoom = d3.zoom()
+            .scaleExtent([0.05, 5])
+            .on("zoom", (event) => g.attr("transform", event.transform));
+            
+        svg.call(zoom);
+        svg.call(zoom.transform, d3.zoomIdentity.translate(width / 2, height / 2).scale(initialScale));
+
+        // 定義主標題的弧形文字路徑
+        const defs = svg.append("defs");
+        defs.append("path")
+            .attr("id", "title-arc")
+            // 繪製從左 (-125, 10) 到右 (125, 10) 半徑為 125 的上半圓弧
+            .attr("d", "M -125, 10 A 125, 125 0 0, 1 125, 10");
+
+        const treeMap = d3.tree()
+            .size([2 * Math.PI, virtualRadius])
+            .separation((a, b) => (a.parent == b.parent ? 1.2 : 2.0) / a.depth);
+
+        function getNodeColor(d) {
+            let ancestor = d;
+            while (ancestor.depth > 1) { ancestor = ancestor.parent; }
+            return colors[ancestor.data.shortName] || "#475569";
+        }
+
+        let root = d3.hierarchy(treeData, d => d.children);
+        root.x0 = Math.PI;
+        root.y0 = 0;
+
+        let brainToggleState = 0; 
+        function toggleAllNodes() {
+            brainToggleState = (brainToggleState + 1) % 3;
+            root.each(d => {
+                if (brainToggleState === 0) {
+                    if (d._children) { d.children = d._children; d._children = null; }
+                } else if (brainToggleState === 1) {
+                    if (d.depth < 2) { if (d._children) { d.children = d._children; d._children = null; } } 
+                    else { if (d.children) { d._children = d.children; d.children = null; } }
+                } else if (brainToggleState === 2) {
+                    if (d.depth < 1) { if (d._children) { d.children = d._children; d._children = null; } } 
+                    else { if (d.children) { d._children = d.children; d.children = null; } }
+                }
+            });
+            update(root);
+        }
+
+        const linkGenerator = d3.linkRadial().angle(d => d.x).radius(d => d.y);
+        const linksGroup = g.append("g").attr("class", "links-layer");
+        const nodesGroup = g.append("g").attr("class", "nodes-layer");
+
+        // ===== 繪製中心大腦與環繞文字 =====
+        const centerBrain = g.append("g")
+            .attr("class", "center-brain-group")
+            .style("cursor", "pointer")
+            .on("click", (event) => {
+                event.stopPropagation();
+                toggleAllNodes();
+            });
+
+        centerBrain.append("circle")
+            .attr("cx", 0).attr("cy", 0).attr("r", 65)
+            .attr("fill", "#050505").attr("stroke", "#1e293b").attr("stroke-width", 2);
+        
+        // (1) 加入弧形主標題
+        centerBrain.append("text")
+            .attr("class", "font-bold tracking-widest")
+            .style("fill", "#ffffff")
+            .style("font-size", "34px")
+            .style("pointer-events", "none")
+            .style("text-shadow", "0 0 15px rgba(255,255,255,0.3)")
+            .append("textPath")
+            .attr("href", "#title-arc")
+            .attr("startOffset", "50%")
+            .attr("text-anchor", "middle")
+            .text("認知偏誤圖譜");
+
+        // (2) 加入大腦 Emoji
+        centerBrain.append("text")
+            .attr("class", "center-brain text-6xl")
+            .attr("text-anchor", "middle")
+            .attr("dominant-baseline", "central")
+            .attr("y", 2)
+            .text("🧠");
+
+        // (3) 加入置中排列的操作說明 (大腦下方)
+        const instructions = [
+            "🖱️ 滾輪縮放 / 拖曳平移",
+            "🔵 點擊圓點：展開或收合",
+            "📖 點擊文字：開啟詳情"
+        ];
+        instructions.forEach((txt, idx) => {
+            centerBrain.append("text")
+                .attr("y", 100 + idx * 30) // 從半徑外圍下方開始排
+                .attr("text-anchor", "middle")
+                .style("fill", "#94a3b8")
+                .style("font-size", "15px")
+                .style("font-weight", "500")
+                .style("letter-spacing", "1.5px")
+                .style("pointer-events", "none")
+                .text(txt);
+        });
+
+        let nodeIdCounter = 0;
+
+        function update(source) {
+            const treeData = treeMap(root);
+            const nodes = treeData.descendants().slice(1);
+            const links = treeData.links();
+
+            nodes.forEach(d => {
+                if (d.depth === 1) d.y = virtualRadius * 0.35;
+                if (d.depth === 2) d.y = virtualRadius * 0.65;
+                if (d.depth === 3) d.y = virtualRadius;
+            });
+
+            // ===== 處理連線 (Links) =====
+            const link = linksGroup.selectAll('path.link')
+                .data(links, d => d.target.id || (d.target.id = ++nodeIdCounter));
+
+            const linkEnter = link.enter().insert('path', "g")
+                .attr("class", "link")
+                .attr("stroke", d => getNodeColor(d.target))
+                .attr('d', d => {
+                    const o = {x: source.x0, y: source.y0};
+                    return linkGenerator({source: o, target: o});
+                });
+
+            const linkUpdate = linkEnter.merge(link);
+            linkUpdate.transition().duration(duration).attr('d', linkGenerator);
+
+            link.exit().transition().duration(duration)
+                .attr('d', d => {
+                    const o = {x: source.x, y: source.y};
+                    return linkGenerator({source: o, target: o});
+                })
+                .remove();
+
+            // ===== 處理節點 (Nodes) =====
+            const node = nodesGroup.selectAll('g.node')
+                .data(nodes, d => d.id || (d.id = ++nodeIdCounter));
+
+            const nodeEnter = node.enter().append('g')
+                .attr('class', 'node')
+                .attr("transform", d => `rotate(${source.x0 * 180 / Math.PI - 90}) translate(${source.y0},0)`);
+
+            // 將各層級的圓點半徑放大3倍
+            nodeEnter.append('circle')
+                .attr('class', 'node-circle')
+                .attr('r', d => d.depth === 1 ? 24 : (d.depth === 2 ? 18 : 12))
+                .style("fill", d => d._children ? getNodeColor(d) : "#000")
+                .style("stroke", d => getNodeColor(d))
+                .on("click", (event, d) => {
+                    event.stopPropagation();
+                    if (d.children) { d._children = d.children; d.children = null; } 
+                    else { d.children = d._children; d._children = null; }
+                    update(d);
+                });
+
+            // 節點文字 (套用分類同色 fill)
+            nodeEnter.append('text')
+                .attr("dy", "0.31em")
+                .style("fill", d => getNodeColor(d)) 
+                .text(d => d.data.name)
+                .on("click", (event, d) => {
+                    event.stopPropagation();
+                    openDetailPanel(d);
+                });
+
+            const nodeUpdate = nodeEnter.merge(node);
+            nodeUpdate.transition().duration(duration)
+                .attr("transform", d => `rotate(${d.x * 180 / Math.PI - 90}) translate(${d.y},0)`);
+
+            nodeUpdate.select('circle')
+                .style("fill", d => d._children ? getNodeColor(d) : "#000");
+
+            // 更新文字對齊邏輯：以 Math.PI (180度) 為界，劃分左半與右半
+            nodeUpdate.select('text')
+                .attr("transform", d => {
+                    const rotationOffset = -(d.x * 180 / Math.PI - 90); // 抵銷旋轉使文字永遠橫向
+                    const isLeft = d.x >= Math.PI; // 大於等於 180 度即為左半球
+                    const xOffset = isLeft ? -35 : 35; // 配合放大3倍的圓點，加長文字偏移間距
+                    return `rotate(${rotationOffset}) translate(${xOffset}, 0)`;
+                })
+                .attr("text-anchor", d => {
+                    const isLeft = d.x >= Math.PI;
+                    // 若在左半球，文字靠右對齊 (end) 避免壓過圓點；右半球則靠左對齊 (start)
+                    return isLeft ? "end" : "start";
+                });
+
+            const nodeExit = node.exit().transition().duration(duration)
+                .attr("transform", d => `rotate(${source.x * 180 / Math.PI - 90}) translate(${source.y},0)`)
+                .remove();
+
+            nodeExit.select('circle').attr('r', 1e-6);
+            nodeExit.select('text').style('fill-opacity', 1e-6);
+
+            nodes.forEach(d => { d.x0 = d.x; d.y0 = d.y; });
+        }
+        
+        update(root);
+
+        // ===== 詳情面板 UI 邏輯 =====
+        const infoTitle = document.getElementById('info-title');
+        const panelGlow = document.getElementById('panel-glow');
+        const infoBadge = document.getElementById('info-badge');
+        const infoPath = document.getElementById('info-path');
+        const infoContent = document.getElementById('info-content');
+        const detailPanel = document.getElementById('detail-panel');
+        const closePanelBtn = document.getElementById('close-panel-btn');
+
+        closePanelBtn.addEventListener('click', () => {
+            detailPanel.classList.remove('panel-open');
+        });
+
+        function openDetailPanel(d) {
+            infoTitle.textContent = d.data.name;
+            const themeColor = getNodeColor(d);
+            panelGlow.style.backgroundColor = themeColor;
+            
+            let badgeText = "";
+            let pathHTML = "";
+            
+            if (d.data.type === "category") {
+                badgeText = "四大象限";
+                pathHTML = `<span style="color: ${themeColor}">${d.data.name}</span>`;
+            } else if (d.data.type === "subcategory") {
+                badgeText = "核心觀點";
+                pathHTML = `
+                    <span>${d.parent.data.name}</span>
+                    <svg class="w-4 h-4 mx-1 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                    <span style="color: ${themeColor}">${d.data.name}</span>
+                `;
+            } else if (d.data.type === "bias") {
+                badgeText = "具體偏誤";
+                pathHTML = `
+                    <span>${d.parent.parent.data.name}</span>
+                    <svg class="w-4 h-4 mx-1 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                    <span>${d.parent.data.name}</span>
+                    <svg class="w-4 h-4 mx-1 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                    <span style="color: ${themeColor}">${d.data.name}</span>
+                `;
+            }
+
+            infoBadge.textContent = badgeText;
+            infoBadge.style.backgroundColor = themeColor + "25"; 
+            infoBadge.style.color = themeColor;
+            infoBadge.style.border = `1px solid ${themeColor}60`;
+            infoPath.innerHTML = pathHTML;
+
+            infoContent.innerHTML = `
+                <p class="font-light tracking-wide text-slate-200">
+                    ${d.data.desc || "暫無詳細說明。"}
+                </p>
+            `;
+            detailPanel.classList.add('panel-open');
+        }
+
+        window.addEventListener('resize', () => {
+            width = container.clientWidth;
+            height = container.clientHeight;
+        });
+    </script>
+</body>
+</html>
