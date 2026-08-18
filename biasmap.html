@@ -646,18 +646,66 @@
             nodeUpdate.select('circle')
                 .style("fill", d => d._children ? getNodeColor(d) : "#000");
 
-            // 更新文字對齊邏輯：以 Math.PI (180度) 為界，劃分左半與右半
+            // 更新文字對齊邏輯：根據角度決定橫式或直式，避免文字互相遮擋
             nodeUpdate.select('text')
+                .transition().duration(duration)
                 .attr("transform", d => {
-                    const rotationOffset = -(d.x * 180 / Math.PI - 90); // 抵銷旋轉使文字永遠橫向
-                    const isLeft = d.x >= Math.PI; // 大於等於 180 度即為左半球
-                    const xOffset = isLeft ? -35 : 35; // 配合放大3倍的圓點，加長文字偏移間距
-                    return `rotate(${rotationOffset}) translate(${xOffset}, 0)`;
+                    const deg = (d.x * 180) / Math.PI;
+                    const rotationOffset = -(deg - 90); // 抵銷旋轉使局部座標垂直/水平
+                    
+                    // 定義視覺上的上下方區間
+                    const isTop = deg <= 45 || deg >= 315;
+                    const isBottom = deg >= 135 && deg <= 225;
+
+                    // 將規則放寬至第二級(>=2)與第三級條目
+                    if (d.depth >= 2 && (isTop || isBottom)) {
+                        // 上下方改為直式，並調整 Y 軸偏移 (向上或向下推 35px)
+                        const yOffset = isTop ? -35 : 35;
+                        return `rotate(${rotationOffset}) translate(0, ${yOffset})`;
+                    } else {
+                        // 左右兩側維持橫式，並調整 X 軸偏移
+                        const isLeft = deg >= 180;
+                        const xOffset = isLeft ? -35 : 35;
+                        return `rotate(${rotationOffset}) translate(${xOffset}, 0)`;
+                    }
+                })
+                .style("writing-mode", d => {
+                    const deg = (d.x * 180) / Math.PI;
+                    const isTop = deg <= 45 || deg >= 315;
+                    const isBottom = deg >= 135 && deg <= 225;
+                    // 第二級與第三級條目且位於上下方時，套用直式排版
+                    return (d.depth >= 2 && (isTop || isBottom)) ? "vertical-rl" : "horizontal-tb";
                 })
                 .attr("text-anchor", d => {
-                    const isLeft = d.x >= Math.PI;
-                    // 若在左半球，文字靠右對齊 (end) 避免壓過圓點；右半球則靠左對齊 (start)
-                    return isLeft ? "end" : "start";
+                    const deg = (d.x * 180) / Math.PI;
+                    const isTop = deg <= 45 || deg >= 315;
+                    const isBottom = deg >= 135 && deg <= 225;
+                    
+                    if (d.depth >= 2 && (isTop || isBottom)) {
+                        // 上方的直式文字靠底對齊(end)，下方的直式文字靠頂對齊(start)，使文字向外發展
+                        return isTop ? "end" : "start";
+                    } else {
+                        const isLeft = deg >= 180;
+                        return isLeft ? "end" : "start";
+                    }
+                })
+                .attr("dy", d => {
+                    const deg = (d.x * 180) / Math.PI;
+                    const isTop = deg <= 45 || deg >= 315;
+                    const isBottom = deg >= 135 && deg <= 225;
+                    
+                    // 橫式文字用 0.31em 垂直置中，直式文字不需要偏移即可置中對齊
+                    if (d.depth >= 2 && (isTop || isBottom)) {
+                        return "0";
+                    }
+                    return "0.31em";
+                })
+                .style("letter-spacing", d => {
+                    const deg = (d.x * 180) / Math.PI;
+                    const isTop = deg <= 45 || deg >= 315;
+                    const isBottom = deg >= 135 && deg <= 225;
+                    // 為直式文字增加一點字距，視覺上更清晰
+                    return (d.depth >= 2 && (isTop || isBottom)) ? "2px" : "normal";
                 });
 
             const nodeExit = node.exit().transition().duration(duration)
