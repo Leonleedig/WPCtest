@@ -457,6 +457,16 @@
         let i = 0;
         const duration = 700;
         
+        // 自動往上追溯所屬象限的顏色
+        function getNodeColor(d) {
+            if (d.depth === 0) return "#ffffff"; // 大腦(根節點)不吃顏色
+            let ancestor = d;
+            while (ancestor.depth > 1) {
+                ancestor = ancestor.parent;
+            }
+            return colors[ancestor.data.shortName] || "#94a3b8";
+        }
+
         // ===== 佈局與縮放設定 =====
         const svg = d3.select("#viz-container").append("svg")
             .attr("width", "100%")
@@ -486,19 +496,31 @@
             // 繪製從左 (-125, 10) 到右 (125, 10) 半徑為 125 的上半圓弧
             .attr("d", "M -125, 10 A 125, 125 0 0, 1 125, 10");
 
+        // 建立資料階層
+        let root = d3.hierarchy(treeData, d => d.children);
+
+        // ==========================================
+        // 新規則：計算「固有位置 (Permanent Address)」
+        // ==========================================
         const treeMap = d3.tree()
             .size([2 * Math.PI, virtualRadius])
             .separation((a, b) => (a.parent == b.parent ? 1.2 : 2.0) / a.depth);
 
-        function getNodeColor(d) {
-            let ancestor = d;
-            while (ancestor.depth > 1) { ancestor = ancestor.parent; }
-            return colors[ancestor.data.shortName] || "#475569";
-        }
+        // 1. 強制對整棵「全展開」的樹執行一次原生佈局演算
+        treeMap(root); 
 
-        let root = d3.hierarchy(treeData, d => d.children);
-        root.x0 = Math.PI;
-        root.y0 = 0;
+        // 2. 將算好的座標永久烙印到節點上，成為不變的固定位置
+        root.each(d => {
+            d.fixedX = d.x; // 固定的 360 度夾角
+            // 固定的層級半徑
+            d.fixedY = d.depth === 1 ? virtualRadius * 0.35 : 
+                       d.depth === 2 ? virtualRadius * 0.65 : 
+                       d.depth === 3 ? virtualRadius : 0;
+            
+            // 設定動畫的初始起點
+            d.x0 = d.fixedX;
+            d.y0 = d.fixedY;
+        });
 
         let brainToggleState = 0; 
         function toggleAllNodes() {
@@ -517,7 +539,8 @@
             update(root);
         }
 
-        const linkGenerator = d3.linkRadial().angle(d => d.x).radius(d => d.y);
+        // 連線產生器改為讀取固定的 fixedX 與 fixedY
+        const linkGenerator = d3.linkRadial().angle(d => d.fixedX).radius(d => d.fixedY);
         const linksGroup = g.append("g").attr("class", "links-layer");
         const nodesGroup = g.append("g").attr("class", "nodes-layer");
 
@@ -563,7 +586,7 @@
         ];
         instructions.forEach((txt, idx) => {
             centerBrain.append("text")
-                .attr("y", 100 + idx * 30) // 從半徑外圍下方開始排
+                .attr("y", 100 + idx * 30) 
                 .attr("text-anchor", "middle")
                 .style("fill", "#94a3b8")
                 .style("font-size", "15px")
@@ -576,15 +599,9 @@
         let nodeIdCounter = 0;
 
         function update(source) {
-            const treeData = treeMap(root);
-            const nodes = treeData.descendants().slice(1);
-            const links = treeData.links();
-
-            nodes.forEach(d => {
-                if (d.depth === 1) d.y = virtualRadius * 0.35;
-                if (d.depth === 2) d.y = virtualRadius * 0.65;
-                if (d.depth === 3) d.y = virtualRadius;
-            });
+            // 直接抓取目前未被收合的「可視」節點與連線（不重新演算佈局）
+            const nodes = root.descendants().slice(1);
+            const links = root.links();
 
             // ===== 處理連線 (Links) =====
             const link = linksGroup.selectAll('path.link')
@@ -594,7 +611,7 @@
                 .attr("class", "link")
                 .attr("stroke", d => getNodeColor(d.target))
                 .attr('d', d => {
-                    const o = {x: source.x0, y: source.y0};
+                    const o = {fixedX: source.x0, fixedY: source.y0};
                     return linkGenerator({source: o, target: o});
                 });
 
@@ -603,7 +620,8 @@
 
             link.exit().transition().duration(duration)
                 .attr('d', d => {
-                    const o = {x: source.x, y: source.y};
+                    // 收合時，連線退縮回父節點的固定位置
+                    const o = {fixedX: source.fixedX, fixedY: source.fixedY};
                     return linkGenerator({source: o, target: o});
                 })
                 .remove();
@@ -630,92 +648,141 @@
                 });
 
             // 節點文字 (套用分類同色 fill)
-            nodeEnter.append('text')
-                .attr("dy", "0.31em")
+            const textNode = nodeEnter.append('text')
                 .style("fill", d => getNodeColor(d)) 
-                .text(d => d.data.name)
                 .on("click", (event, d) => {
                     event.stopPropagation();
                     openDetailPanel(d);
                 });
 
+            // 定義文字斷行與整併邏輯函數
+            function getNodeTextLines(d) {
+                if (!d.data.name) return [];
+                let name = d.data.name;
+                let lines = [];
+                
+                // 1. 強制換行：遇到半形或全形括號 "(" 或 "（" 進行切割
+                let parts = name.split(/(?=[(（])/);
+                
+                parts.forEach(part => {
+                    part = part.trim();
+                    if (!part) return;
+                    
+                    // 2. 餘字整併與換行 (針對第二級條目)
+                    if (d.depth === 2) {
+                        let i = 0;
+                        while (i < part.length) {
+                            // 剩餘字數 <= 12 (即 10+2 以下)，不換行直接合併
+                            if (part.length - i <= 12) {
+                                lines.push(part.substring(i));
+                                break;
+                            } else {
+                                lines.push(part.substring(i, i + 10));
+                                i += 10;
+                            }
+                        }
+                    } else {
+                        lines.push(part);
+                    }
+                });
+                return lines;
+            }
+
+            textNode.each(function(d) {
+                const el = d3.select(this);
+                const lines = getNodeTextLines(d);
+                
+                if (lines.length > 1) {
+                    lines.forEach((line, i) => {
+                        el.append("tspan")
+                          .text(line)
+                          .attr("x", 0) 
+                          .attr("dy", i === 0 ? "0" : "1.2em"); 
+                    });
+                } else {
+                    el.text(lines[0] || "");
+                }
+            });
+
             const nodeUpdate = nodeEnter.merge(node);
             nodeUpdate.transition().duration(duration)
-                .attr("transform", d => `rotate(${d.x * 180 / Math.PI - 90}) translate(${d.y},0)`);
+                .attr("transform", d => `rotate(${d.fixedX * 180 / Math.PI - 90}) translate(${d.fixedY},0)`);
 
             nodeUpdate.select('circle')
                 .style("fill", d => d._children ? getNodeColor(d) : "#000");
 
-            // 更新文字對齊邏輯：根據角度決定橫式或直式，避免文字互相遮擋
+            // 更新文字對齊邏輯：改以 fixedX 計算絕對經緯度
             nodeUpdate.select('text')
                 .transition().duration(duration)
                 .attr("transform", d => {
-                    const deg = (d.x * 180) / Math.PI;
-                    const rotationOffset = -(deg - 90); // 抵銷旋轉使局部座標垂直/水平
+                    const deg = (d.fixedX * 180) / Math.PI;
+                    const rotationOffset = -(deg - 90); 
                     
-                    // 定義視覺上的上下方區間
                     const isTop = deg <= 45 || deg >= 315;
                     const isBottom = deg >= 135 && deg <= 225;
+                    const isLeft = deg >= 180;
 
-                    // 將規則放寬至第二級(>=2)與第三級條目
-                    if (d.depth >= 2 && (isTop || isBottom)) {
-                        // 上下方改為直式，並調整 Y 軸偏移 (向上或向下推 35px)
+                    // 只有「第三級」在上下端時維持直式向外推
+                    if (d.depth === 3 && (isTop || isBottom)) {
                         const yOffset = isTop ? -35 : 35;
                         return `rotate(${rotationOffset}) translate(0, ${yOffset})`;
                     } else {
-                        // 左右兩側維持橫式，並調整 X 軸偏移
-                        const isLeft = deg >= 180;
+                        // 其他(包含第一級、第二級、與第三級側邊)一律水平排版，依據左右半球偏移
                         const xOffset = isLeft ? -35 : 35;
                         return `rotate(${rotationOffset}) translate(${xOffset}, 0)`;
                     }
                 })
                 .style("writing-mode", d => {
-                    const deg = (d.x * 180) / Math.PI;
+                    const deg = (d.fixedX * 180) / Math.PI;
                     const isTop = deg <= 45 || deg >= 315;
                     const isBottom = deg >= 135 && deg <= 225;
-                    // 第二級與第三級條目且位於上下方時，套用直式排版
-                    return (d.depth >= 2 && (isTop || isBottom)) ? "vertical-rl" : "horizontal-tb";
+                    // 只有第三級的上下端是直排
+                    return (d.depth === 3 && (isTop || isBottom)) ? "vertical-rl" : "horizontal-tb";
                 })
                 .attr("text-anchor", d => {
-                    const deg = (d.x * 180) / Math.PI;
+                    const deg = (d.fixedX * 180) / Math.PI;
                     const isTop = deg <= 45 || deg >= 315;
                     const isBottom = deg >= 135 && deg <= 225;
+                    const isLeft = deg >= 180;
                     
-                    if (d.depth >= 2 && (isTop || isBottom)) {
-                        // 上方的直式文字靠底對齊(end)，下方的直式文字靠頂對齊(start)，使文字向外發展
+                    if (d.depth === 3 && (isTop || isBottom)) {
                         return isTop ? "end" : "start";
                     } else {
-                        const isLeft = deg >= 180;
-                        return isLeft ? "end" : "start";
+                        return isLeft ? "end" : "start"; // 左半球靠右對齊(向左長)，右半球靠左對齊(向右長)
                     }
                 })
                 .attr("dy", d => {
-                    const deg = (d.x * 180) / Math.PI;
+                    const deg = (d.fixedX * 180) / Math.PI;
                     const isTop = deg <= 45 || deg >= 315;
                     const isBottom = deg >= 135 && deg <= 225;
                     
-                    // 橫式文字用 0.31em 垂直置中，直式文字不需要偏移即可置中對齊
-                    if (d.depth >= 2 && (isTop || isBottom)) {
+                    if (d.depth === 3 && (isTop || isBottom)) {
                         return "0";
+                    }
+                    
+                    // 透過斷行函數計算總行數，進行動態垂直置中
+                    const lines = getNodeTextLines(d);
+                    if (lines.length > 1) {
+                        return `${-(lines.length - 1) * 0.6 + 0.31}em`;
                     }
                     return "0.31em";
                 })
                 .style("letter-spacing", d => {
-                    const deg = (d.x * 180) / Math.PI;
+                    const deg = (d.fixedX * 180) / Math.PI;
                     const isTop = deg <= 45 || deg >= 315;
                     const isBottom = deg >= 135 && deg <= 225;
-                    // 為直式文字增加一點字距，視覺上更清晰
-                    return (d.depth >= 2 && (isTop || isBottom)) ? "2px" : "normal";
+                    return (d.depth === 3 && (isTop || isBottom)) ? "2px" : "normal";
                 });
 
             const nodeExit = node.exit().transition().duration(duration)
-                .attr("transform", d => `rotate(${source.x * 180 / Math.PI - 90}) translate(${source.y},0)`)
+                .attr("transform", d => `rotate(${source.fixedX * 180 / Math.PI - 90}) translate(${source.fixedY},0)`)
                 .remove();
 
             nodeExit.select('circle').attr('r', 1e-6);
             nodeExit.select('text').style('fill-opacity', 1e-6);
 
-            nodes.forEach(d => { d.x0 = d.x; d.y0 = d.y; });
+            // 更新動畫的紀錄起點為固定座標
+            nodes.forEach(d => { d.x0 = d.fixedX; d.y0 = d.fixedY; });
         }
         
         update(root);
