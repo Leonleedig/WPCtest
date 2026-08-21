@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>D3.js 環狀心智圖</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- D3.js v7 -->
+    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+    <!-- Google Material Symbols Outlined -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <style>
+        body {
+            background-color: #f8fafc;
+            color: #0f172a;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .node-circle {
+            cursor: pointer;
+            transition: r 0.2s ease, stroke-width 0.2s ease, fill 0.2s ease;
+        }
+
+        .node-icon {
+            font-size: 18px !important;
+            user-select: none;
+            pointer-events: auto;
+            cursor: grab;
+            text-anchor: middle;
+            dominant-baseline: central;
+            transition: fill 0.2s ease, transform 0.2s ease;
+        }
+
+        .node-icon:active {
+            cursor: grabbing;
+        }
+
+        .node-icon:hover {
+            transform: scale(1.25);
+        }
+
+        .node-label {
+            font-size: 10px;
+            font-weight: 500;
+            user-select: none;
+            pointer-events: auto;
+            cursor: pointer;
+            fill: #334155;
+            transition: fill 0.2s ease, font-weight 0.2s ease;
+        }
+
+        .node-label:hover:not(.root-label) {
+            font-weight: 700 !important;
+        }
+
+        body:not(.group-color) .node-label:hover:not(.root-label) {
+            fill: #2563eb !important;
+        }
+
+        body.dark-mode:not(.group-color) .node-label:hover:not(.root-label) {
+            fill: #60a5fa !important;
+        }
+
+        .root-label {
+            font-size: 26px !important;
+            font-weight: 800 !important;
+            fill: #ffffff !important;
+            line-height: 1.15;
+            pointer-events: auto;
+            cursor: pointer;
+        }
+
+        .link-path {
+            fill: none;
+            stroke: #cbd5e1;
+            stroke-opacity: 0.85;
+            stroke-width: 1.2px;
+            transition: stroke 0.3s ease;
+        }
+
+        /* Dark Mode Dynamic Styles */
+        body.dark-mode {
+            background-color: #0f172a !important;
+            color: #f8fafc;
+        }
+
+        body.dark-mode .node-label {
+            fill: #cbd5e1;
+        }
+
+        body.dark-mode .link-path {
+            stroke: #334155;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen relative overflow-hidden select-none bg-slate-50 transition-colors duration-300">
+
+    <div id="canvas-container" class="w-full h-full cursor-grab active:cursor-grabbing">
+        <svg id="mindmap-svg" class="w-full h-full"></svg>
+    </div>
+
+    <!-- Instructions / Help Modal -->
+    <div id="help-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm hidden transition-opacity">
+        <div class="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 p-6 rounded-2xl shadow-2xl max-w-md w-11/12 border border-slate-200 dark:border-slate-700">
+            <h3 class="text-lg font-bold mb-4 flex items-center justify-between border-b pb-2 border-slate-200 dark:border-slate-700">
+                <span>📖 本平台操作說明</span>
+                <button id="close-modal-btn" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xl font-bold">&times;</button>
+            </h3>
+            <ul class="space-y-3 text-sm leading-relaxed">
+                <li class="flex items-start gap-2">
+                    <span class="bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 px-2 py-0.5 rounded text-xs font-semibold">拖曳平移</span>
+                    <span>按住滑鼠左鍵並拖動畫布，即可自由平移畫面。</span>
+                </li>
+                <li class="flex items-start gap-2">
+                    <span class="bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 px-2 py-0.5 rounded text-xs font-semibold">滾輪縮放</span>
+                    <span>滾動滑鼠滾輪可放大或縮小視角。</span>
+                </li>
+                <li class="flex items-start gap-2">
+                    <span class="bg-amber-100 dark:bg-amber-900 text-amber-600 dark:text-amber-300 px-2 py-0.5 rounded text-xs font-semibold font-mono">固定位置</span>
+                    <span>所有 API 方法已鎖定於 360 度固定角度，展開/收合時絕不改變條目位置。</span>
+                </li>
+                <li class="flex items-start gap-2">
+                    <span class="bg-amber-100 dark:bg-amber-900 text-amber-600 dark:text-amber-300 px-2 py-0.5 rounded text-xs font-semibold font-mono">核心切換</span>
+                    <span>點擊<b>中央核心大圓塊</b>，可依序「逐層全展開 / 全收合」。</span>
+                </li>
+                <li class="flex items-start gap-2">
+                    <span class="bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 px-2 py-0.5 rounded text-xs font-semibold">節點開合</span>
+                    <span>點擊「<b>圓點標誌</b>」展開或收合分支（藍色實心點代表下方有收合分支；空心點代表已展開或終端葉節點）。</span>
+                </li>
+                <li class="flex items-start gap-2">
+                    <span class="bg-amber-100 dark:bg-amber-900 text-amber-600 dark:text-amber-300 px-2 py-0.5 rounded text-xs font-semibold">自訂拖轉</span>
+                    <span>按住「<b>說明・設定</b>」圖標即可沿內圈軌道拖曳至任意角度，並自動調校文字方向。完全收合時自動隱藏文字標籤，僅保留圖標。</span>
+                </li>
+                <li class="flex items-start gap-2">
+                    <span class="bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-300 px-2 py-0.5 rounded text-xs font-semibold">條目詳情</span>
+                    <span>點擊任何<b>條目文字本身</b>，即可開啟詳情面板，查看該 API / 技術模組的詳細功能解說與 Vibe Coding 程式碼範例。</span>
+                </li>
+            </ul>
+            <div class="mt-6 text-right">
+                <button id="confirm-modal-btn" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-4 py-2 rounded-xl transition-all shadow-md">了解</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Design Specification Modal -->
+    <div id="design-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm hidden transition-opacity">
+        <div class="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 p-6 rounded-2xl shadow-2xl max-w-lg w-11/12 max-h-[85vh] overflow-y-auto border border-slate-200 dark:border-slate-700">
+            <h3 class="text-lg font-bold mb-4 flex items-center justify-between border-b pb-2 border-slate-200 dark:border-slate-700 sticky top-0 bg-white dark:bg-slate-800 z-10">
+                <span>🎨 D3.js 環狀心智圖設計規範紀錄</span>
+                <button id="close-design-modal-btn" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xl font-bold">&times;</button>
+            </h3>
+            <ol class="space-y-3 text-xs sm:text-sm leading-relaxed list-decimal list-inside">
+                <li class="bg-slate-50 dark:bg-slate-700/50 p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-600">
+                    <b class="text-blue-600 dark:text-blue-400">固定 360 度空間記憶：</b>
+                    所有技術末端條目 (Leaves) 均分全 360 度圓周，母條目由其子樹中點決定角度。開合時角度與半徑絕對鎖定，提供直覺的空間記憶點。
+                </li>
+                <li class="bg-slate-50 dark:bg-slate-700/50 p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-600">
+                    <b class="text-blue-600 dark:text-blue-400">「說明・設定」獨立佈局與自訂拖轉：</b>
+                    預設位於 5 點鐘方向（150°），以較短內圈半徑呈現。支援使用者滑鼠拖曳沿軌道旋轉至任意角度，並自動調校 4 象限文字排版；收合時自動隱藏文字標籤，獨留圖標。
+                </li>
+                <li class="bg-slate-50 dark:bg-slate-700/50 p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-600">
+                    <b class="text-blue-600 dark:text-blue-400">階層分層半徑設定：</b>
+                    中央圓塊半徑 58px；「說明・設定」78px；第一層主脈 190px；第二層分類 370px；第三層語法 550px，確保文字完全不遮擋擠壓。
+                </li>
+                <li class="bg-slate-50 dark:bg-slate-700/50 p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-600">
+                    <b class="text-blue-600 dark:text-blue-400">四象限動態文字排版：</b>
+                    <ul class="pl-5 mt-1 space-y-1 list-disc text-xs text-slate-600 dark:text-slate-300">
+                        <li><b>上方 (315°~45°)：</b>垂直直排，列於節點上方。</li>
+                        <li><b>下方 (135°~225°)：</b>垂直直排，列於節點下方。</li>
+                        <li><b>右方 (45°~135°)：</b>水平橫排，列於節點右側。</li>
+                        <li><b>左方 (225°~315°)：</b>水平橫排，列於節點左側。</li>
+                    </ul>
+                </li>
+                <li class="bg-slate-50 dark:bg-slate-700/50 p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-600">
+                    <b class="text-blue-600 dark:text-blue-400">中央核心區塊賦能：</b>
+                    放大為 58px 藍色圓形襯底（移除 Hover 縮放動畫），標題 28px 粗體雙行居中。點擊可切換「分層逐級全展開 / 全收合」循環。
+                </li>
+                <li class="bg-slate-50 dark:bg-slate-700/50 p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-600">
+                    <b class="text-blue-600 dark:text-blue-400">第一級直線連接線：</b>
+                    第一級條目通往核心的連線採中心直線放射，平滑隱藏於中央圓形襯底下方。
+                </li>
+                <li class="bg-slate-50 dark:bg-slate-700/50 p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-600">
+                    <b class="text-blue-600 dark:text-blue-400">獨立圖層渲染順序：</b>
+                    獨立連線層 (`gLinks`) 永遠在最底層，節點與文字在其之上；每次更新動態將中央核心點提升至最頂層 (`raise()`)。
+                </li>
+                <li class="bg-slate-50 dark:bg-slate-700/50 p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-600">
+                    <b class="text-blue-600 dark:text-blue-400">節點開合狀態指標：</b>
+                    藍色實心點代表下方有收合的子分支；空心點代表已展開或終端葉節點。
+                </li>
+                <li class="bg-slate-50 dark:bg-slate-700/50 p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-600">
+                    <b class="text-blue-600 dark:text-blue-400">點按文字觸發詳情面板：</b>
+                    劃分圓點與文字的互動權責——點擊「<b>圓點/圖標</b>」專注於控制層級分支開合與拖曳；點擊「<b>條目文字</b>」則觸發詳情面板。
+                </li>
+                <li class="bg-slate-50 dark:bg-slate-700/50 p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-600">
+                    <b class="text-blue-600 dark:text-blue-400">雙重配色模式（通用／分組）：</b>
+                    提供預設通用藍/灰配色與「分組色彩模式」。切換為分組配色時，系統會為每個一級主脈（包含連線、圓點與文字標籤）配發獨立主題色。
+                </li>
+            </ol>
+            <div class="mt-6 text-right">
+                <button id="confirm-design-modal-btn" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-4 py-2 rounded-xl transition-all shadow-md">關閉</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Node Detail Inspection Modal -->
+    <div id="detail-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm hidden transition-opacity">
+        <div class="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 p-6 rounded-2xl shadow-2xl max-w-lg w-11/12 max-h-[85vh] overflow-y-auto border border-slate-200 dark:border-slate-700 flex flex-col gap-4">
+            <div class="flex items-start justify-between border-b pb-3 border-slate-200 dark:border-slate-700 sticky top-0 bg-white dark:bg-slate-800 z-10">
+                <div>
+                    <span id="detail-node-path" class="text-xs text-blue-600 dark:text-blue-400 font-mono block mb-1">D3.js 生態體系</span>
+                    <h3 id="detail-node-title" class="text-xl font-bold tracking-tight text-slate-900 dark:text-white">API / 模組名稱</h3>
+                </div>
+                <button id="close-detail-modal-btn" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-2xl font-bold leading-none">&times;</button>
+            </div>
+            
+            <div class="space-y-4 text-xs sm:text-sm">
+                <div class="bg-slate-50 dark:bg-slate-700/40 p-3 rounded-xl border border-slate-200/80 dark:border-slate-600">
+                    <span class="font-semibold text-slate-700 dark:text-slate-200 block mb-1">💡 核心用途與功能說明：</span>
+                    <p id="detail-node-desc" class="text-slate-600 dark:text-slate-300 leading-relaxed">載入中...</p>
+                </div>
+
+                <div class="bg-slate-900 text-slate-200 p-3.5 rounded-xl font-mono text-xs overflow-x-auto border border-slate-800 shadow-inner">
+                    <span class="text-slate-400 text-[10px] block mb-1 select-none">// Vibe Coding 常用範例 / 提示詞與語法：</span>
+                    <pre id="detail-node-code" class="text-emerald-400 whitespace-pre-wrap break-all">// code preview</pre>
+                </div>
+            </div>
+
+            <div class="mt-2 text-right">
+                <button id="confirm-detail-modal-btn" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-4 py-2 rounded-xl transition-all shadow-md">關閉</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const D3_TREE_DATA = {
+            name: "D3.js 生態體系",
+            children: [
+                {
+                    name: "說明・設定",
+                    isSettings: true,
+                    children: [
+                        { name: "操作說明", action: "help" },
+                        { name: "深色模式", action: "theme" },
+                        { name: "分組配色", action: "colorScheme" },
+                        { name: "設計", action: "design" }
+                    ]
+                },
+                {
+                    name: "數據與基礎 (Data & Utils)",
+                    children: [
+                        {
+                            name: "d3-array (陣列運算)",
+                            children: [
+                                { name: "d3.group / d3.index" },
+                                { name: "d3.rollup / d3.flatGroup" },
+                                { name: "d3.bin (直方分箱)" },
+                                { name: "d3.extent / min / max" },
+                                { name: "d3.sum / mean / median" },
+                                { name: "d3.quantile / mode / variance" },
+                                { name: "d3.bisect / bisector" },
+                                { name: "d3.cross / pairs / zip" },
+                                { name: "d3.shuffle / permute" },
+                                { name: "d3.range / ticks" }
+                            ]
+                        },
+                        {
+                            name: "d3-fetch & d3-dsv (資料加載)",
+                            children: [
+                                { name: "d3.csv / tsv / dsv" },
+                                { name: "d3.json / text / xml" },
+                                { name: "d3.image / blob / buffer" },
+                                { name: "d3.csvParse / format" }
+                            ]
+                        },
+                        {
+                            name: "d3-format (數字排版)",
+                            children: [
+                                { name: "d3.format (千分位/百分比)" },
+                                { name: "d3.formatPrefix (SI前綴)" },
+                                { name: "d3.formatSpecifier" }
+                            ]
+                        },
+                        {
+                            name: "d3-time & format (時間處理)",
+                            children: [
+                                { name: "d3.timeDay / Month / Year" },
+                                { name: "d3.timeFormat / parse" },
+                                { name: "d3.utcFormat / utcParse" },
+                                { name: "d3.timeInterval" }
+                            ]
+                        },
+                        {
+                            name: "d3-random (隨機數生成)",
+                            children: [
+                                { name: "d3.randomUniform" },
+                                { name: "d3.randomNormal" },
+                                { name: "d3.randomLogNormal" },
+                                { name: "d3.randomBates / IrwinHall" }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    name: "DOM 與動畫 (DOM & Motion)",
+                    children: [
+                        {
+                            name: "d3-selection (DOM 選擇器)",
+                            children: [
+                                { name: "d3.select / selectAll" },
+                                { name: "selection.data / datum" },
+                                { name: "selection.join (enter/update/exit)" },
+                                { name: "selection.attr / style / classed" },
+                                { name: "selection.property / text / html" },
+                                { name: "selection.append / insert / remove" },
+                                { name: "selection.on / dispatch" },
+                                { name: "selection.raise / lower" }
+                            ]
+                        },
+                        {
+                            name: "d3-transition (動態補間)",
+                            children: [
+                                { name: "selection.transition" },
+                                { name: "transition.duration / delay" },
+                                { name: "transition.ease / tween" },
+                                { name: "transition.end (Promise)" },
+                                { name: "d3.active" }
+                            ]
+                        },
+                        {
+                            name: "d3-ease (緩動曲線)",
+                            children: [
+                                { name: "d3.easeLinear / Quad / Cubic" },
+                                { name: "d3.easeSin / Exp / Circle" },
+                                { name: "d3.easeElastic / Back / Bounce" }
+                            ]
+                        },
+                        {
+                            name: "d3-timer (高精度計時)",
+                            children: [
+                                { name: "d3.now" },
+                                { name: "d3.timer / timerFlush" },
+                                { name: "d3.timeout / interval" }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    name: "視覺與比例尺 (Geometry & Scales)",
+                    children: [
+                        {
+                            name: "d3-scale (數據映射)",
+                            children: [
+                                { name: "scaleLinear / Pow / Sqrt" },
+                                { name: "scaleLog / Symlog" },
+                                { name: "scaleTime / Utc" },
+                                { name: "scaleBand / Point" },
+                                { name: "scaleOrdinal / Implicit" },
+                                { name: "scaleQuantile / Quantize" },
+                                { name: "scaleThreshold" },
+                                { name: "scaleSequential / Diverging" }
+                            ]
+                        },
+                        {
+                            name: "d3-scale-chromatic (色階與配色)",
+                            children: [
+                                { name: "schemeCategory10 / Tableau10" },
+                                { name: "interpolateViridis / Inferno" },
+                                { name: "interpolatePlasma / Warm / Cool" },
+                                { name: "interpolateRdBu / BrBG" }
+                            ]
+                        },
+                        {
+                            name: "d3-shape (圖形生成器)",
+                            children: [
+                                { name: "d3.line / lineRadial" },
+                                { name: "d3.area / areaRadial" },
+                                { name: "d3.arc / pie" },
+                                { name: "d3.symbol / symbolCircle..." },
+                                { name: "d3.curveBasis / Cardinal..." },
+                                { name: "d3.stack / stackOrder..." }
+                            ]
+                        },
+                        {
+                            name: "d3-axis (座標軸渲染)",
+                            children: [
+                                { name: "d3.axisTop / axisBottom" },
+                                { name: "d3.axisLeft / axisRight" },
+                                { name: "axis.ticks / tickFormat" },
+                                { name: "axis.tickSize / tickPadding" }
+                            ]
+                        },
+                        {
+                            name: "d3-polygon & path (幾何計算)",
+                            children: [
+                                { name: "d3.path (Canvas路徑)" },
+                                { name: "d3.polygonArea / Centroid" },
+                                { name: "d3.polygonHull (凸包)" },
+                                { name: "d3.polygonContains" }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    name: "階層與關聯 (Hierarchy & Networks)",
+                    children: [
+                        {
+                            name: "d3-hierarchy (階層架構)",
+                            children: [
+                                { name: "d3.hierarchy (階層化)" },
+                                { name: "d3.tree (樹狀圖)" },
+                                { name: "d3.cluster (聚類樹)" },
+                                { name: "d3.treemap (矩陣樹圖)" },
+                                { name: "d3.pack (圓形打包)" },
+                                { name: "d3.partition (旭日圖/分區)" },
+                                { name: "node.ancestors / descendants" },
+                                { name: "node.leaves / links / path" },
+                                { name: "node.sum / sort" }
+                            ]
+                        },
+                        {
+                            name: "d3-force (力導向物理模擬)",
+                            children: [
+                                { name: "d3.forceSimulation" },
+                                { name: "forceManyBody (引力/斥力)" },
+                                { name: "forceLink (彈簧鏈接)" },
+                                { name: "forceCenter / forceX / forceY" },
+                                { name: "forceRadial / forceCollide" }
+                            ]
+                        },
+                        {
+                            name: "d3-chord (和弦圖)",
+                            children: [
+                                { name: "d3.chord / chordDirected" },
+                                { name: "d3.ribbon / ribbonArrow" }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    name: "地理與空間 (Spatial & Geometrics)",
+                    children: [
+                        {
+                            name: "d3-geo (地理地圖)",
+                            children: [
+                                { name: "d3.geoPath" },
+                                { name: "d3.geoMercator / Orthographic" },
+                                { name: "d3.geoEquirectangular / Albers" },
+                                { name: "d3.geoCentroid / Area / Bounds" },
+                                { name: "d3.geoDistance / Interpolate" },
+                                { name: "d3.geoGraticule (經緯網)" }
+                            ]
+                        },
+                        {
+                            name: "d3-delaunay (空間網格)",
+                            children: [
+                                { name: "Delaunay.from" },
+                                { name: "delaunay.voronoi (沃羅諾伊)" },
+                                { name: "delaunay.find (最近鄰檢索)" }
+                            ]
+                        },
+                        {
+                            name: "d3-contour (等高線與密度)",
+                            children: [
+                                { name: "d3.contours" },
+                                { name: "d3.contourDensity (核密度)" }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    name: "互動與控制 (Interactions)",
+                    children: [
+                        {
+                            name: "d3-zoom (縮放平移)",
+                            children: [
+                                { name: "d3.zoom" },
+                                { name: "d3.zoomIdentity / Transform" },
+                                { name: "zoom.scaleBy / translateBy" }
+                            ]
+                        },
+                        {
+                            name: "d3-drag (拖曳手勢)",
+                            children: [
+                                { name: "d3.drag" },
+                                { name: "d3.dragDisable / Enable" }
+                            ]
+                        },
+                        {
+                            name: "d3-brush (刷選區域)",
+                            children: [
+                                { name: "d3.brush / brushX / brushY" },
+                                { name: "d3.brushSelection" }
+                            ]
+                        },
+                        {
+                            name: "d3-dispatch (事件調度)",
+                            children: [
+                                { name: "d3.dispatch" },
+                                { name: "dispatch.on / call" }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        };
+
+        const svg = d3.select("#mindmap-svg");
+        const container = d3.select("#canvas-container");
+        
+        let width = container.node().clientWidth;
+        let height = container.node().clientHeight;
+
+        // Group container centered on canvas
+        const g = svg.append("g");
+
+        // Layers to manage SVG Z-Index: Links layer at bottom, Nodes layer on top.
+        const gLinks = g.append("g").attr("class", "links-layer");
+        const gNodes = g.append("g").attr("class", "nodes-layer");
+
+        // Zoom Behavior
+        const zoom = d3.zoom()
+            .scaleExtent([0.25, 3.5])
+            .on("zoom", (event) => g.attr("transform", event.transform));
+
+        svg.call(zoom);
+
+        function resetView() {
+            // Automatically fit scale according to container dimensions
+            const fitScale = Math.max(0.4, Math.min(Math.min(width, height) / 1050, 1.0));
+            svg.call(zoom.transform, d3.zoomIdentity.translate(width / 2, height / 2).scale(fitScale));
+        }
+
+        // Compute layout on the COMPLETE UNCOLLAPSED hierarchy once to lock down positions permanently
+        const fullHierarchy = d3.hierarchy(D3_TREE_DATA);
+
+        // Separate settings branch and technical branches
+        const fullSettings = fullHierarchy.children ? fullHierarchy.children.find(d => d.data.isSettings) : null;
+        const fullTech = fullHierarchy.children ? fullHierarchy.children.filter(d => !d.data.isSettings) : [];
+
+        // 1. Gather all terminal leaf nodes of technical branches in traversal order
+        const techLeaves = [];
+        fullTech.forEach(branch => {
+            branch.eachBefore(d => {
+                if (!d.children || d.children.length === 0) {
+                    techLeaves.push(d);
+                }
+            });
+        });
+
+        const numLeaves = techLeaves.length;
+
+        // Distribute technical leaves evenly across the full 360 degrees without reserving a gap
+        const stepDeg = 360 / numLeaves;
+
+        // Assign fixed angles evenly to all terminal leaf nodes
+        techLeaves.forEach((leaf, idx) => {
+            const deg = (idx + 0.5) * stepDeg;
+            leaf.x = (deg * Math.PI) / 180;
+        });
+
+        // Calculate upper-level branch angles based on the range of their child leaves
+        fullTech.forEach(branch => {
+            branch.eachAfter(d => {
+                if (d.children && d.children.length > 0) {
+                    const childLeaves = d.leaves();
+                    const firstAngle = childLeaves[0].x;
+                    const lastAngle = childLeaves[childLeaves.length - 1].x;
+                    
+                    let diff = lastAngle - firstAngle;
+                    if (diff < 0) diff += 2 * Math.PI;
+                    
+                    const mid = firstAngle + diff / 2;
+                    d.x = mid % (2 * Math.PI);
+                }
+            });
+        });
+
+        // Helper function to sync angles of settings children relative to settings root
+        function syncSettingsChildrenAngles(parentAngle) {
+            if (!fullSettings) return;
+            const settingsChildren = fullSettings.children || fullSettings._children;
+            if (settingsChildren) {
+                const spread = 0.18;
+                const count = settingsChildren.length;
+                settingsChildren.forEach((child, i) => {
+                    const offset = (i - (count - 1) / 2) * spread;
+                    child.x = parentAngle + offset;
+                    child.data._fixedX = child.x;
+                });
+            }
+        }
+
+        // Set fixed initial position for "說明・設定" at 5 o'clock (150°)
+        if (fullSettings) {
+            const settingsAngleDeg = 150;
+            const settingsAngle = (settingsAngleDeg * Math.PI) / 180;
+            fullSettings.x = settingsAngle;
+            syncSettingsChildrenAngles(settingsAngle);
+        }
+
+        // Store pre-calculated fixed angles & explicit layer radii permanently into raw data objects
+        fullHierarchy.descendants().forEach(d => {
+            let layerRadius = 0;
+            const isSettingsNode = d.data.isSettings || (d.parent && d.parent.data.isSettings) || (d.parent && d.parent.parent && d.parent.parent.data.isSettings);
+            
+            if (d.depth === 0) {
+                layerRadius = 0;
+            } else if (isSettingsNode) {
+                if (d.depth === 1) layerRadius = 78;
+                else if (d.depth === 2) layerRadius = 155;
+                else layerRadius = 78 + (d.depth - 1) * 77;
+            } else {
+                if (d.depth === 1) layerRadius = 190; // Keeps Level 1 clear of 58px central node
+                else if (d.depth === 2) layerRadius = 370;
+                else if (d.depth === 3) layerRadius = 550;
+                else layerRadius = d.depth * 180;
+            }
+            
+            d.y = layerRadius;
+            d.data._fixedX = d.x;
+            d.data._fixedY = d.y;
+        });
+
+        // Interactive Root Hierarchy
+        let rootHierarchy = d3.hierarchy(D3_TREE_DATA);
+
+        function getMaxDepth(d) {
+            let max = d.depth;
+            if (d.children) d.children.forEach(c => max = Math.max(max, getMaxDepth(c)));
+            if (d._children) d._children.forEach(c => max = Math.max(max, getMaxDepth(c)));
+            return max;
+        }
+
+        let maxTreeDepth = getMaxDepth(rootHierarchy);
+        let currentExpandStage = 1;
+
+        function setExpansionToDepth(node, targetDepth) {
+            // Ignore the "說明・設定" branch during central node batch expand/collapse
+            if (node.data && node.data.isSettings) {
+                return;
+            }
+
+            if (node.depth < targetDepth) {
+                if (node._children) {
+                    node.children = node._children;
+                    node._children = null;
+                }
+                if (node.children) {
+                    node.children.forEach(child => setExpansionToDepth(child, targetDepth));
+                }
+            } else {
+                if (node.children) {
+                    node._children = node.children;
+                    node.children = null;
+                }
+                if (node._children) {
+                    node._children.forEach(child => setExpansionToDepth(child, targetDepth));
+                }
+            }
+        }
+
+        // Explicitly set "說明・設定" branch to be collapsed initially
+        const initialSettings = rootHierarchy.children ? rootHierarchy.children.find(d => d.data.isSettings) : null;
+        if (initialSettings && initialSettings.children) {
+            initialSettings._children = initialSettings.children;
+            initialSettings.children = null;
+        }
+
+        // Initially collapse technical branches to stage 1
+        setExpansionToDepth(rootHierarchy, 1);
+
+        let isDarkMode = false;
+        let isGroupColor = false;
+
+        const LIGHT_BRANCH_COLORS = [
+            "#d97706", // 說明・設定 (Amber)
+            "#2563eb", // 數據與基礎 (Blue)
+            "#059669", // DOM 與動畫 (Emerald)
+            "#7c3aed", // 視覺與比例尺 (Violet)
+            "#e11d48", // 階層與關聯 (Rose)
+            "#0891b2", // 地理與空間 (Cyan)
+            "#ea580c"  // 互動與控制 (Orange)
+        ];
+
+        const DARK_BRANCH_COLORS = [
+            "#fbbf24", // 說明・設定 (Amber)
+            "#60a5fa", // 數據與基礎 (Blue)
+            "#34d399", // DOM 與動畫 (Emerald)
+            "#a78bfa", // 視覺與比例尺 (Violet)
+            "#fb7185", // 階層與關聯 (Rose)
+            "#22d3ee", // 地理與空間 (Cyan)
+            "#fb923c"  // 互動與控制 (Orange)
+        ];
+
+        function getBranchColor(d) {
+            if (d.depth === 0) return isDarkMode ? "#d97706" : "#2563eb";
+            const topBranch = d.ancestors().reverse()[1];
+            if (!topBranch) return isDarkMode ? "#cbd5e1" : "#334155";
+            
+            const rootChildren = rootHierarchy.children || rootHierarchy._children || [];
+            let branchIndex = rootChildren.indexOf(topBranch);
+            if (branchIndex < 0) branchIndex = 0;
+
+            const palette = isDarkMode ? DARK_BRANCH_COLORS : LIGHT_BRANCH_COLORS;
+            return palette[branchIndex % palette.length];
+        }
+
+        function toggleTheme(node) {
+            isDarkMode = !isDarkMode;
+            document.body.classList.toggle("dark-mode", isDarkMode);
+            if (isDarkMode) {
+                document.body.classList.remove("bg-slate-50");
+                document.body.classList.add("bg-slate-900");
+            } else {
+                document.body.classList.remove("bg-slate-900");
+                document.body.classList.add("bg-slate-50");
+            }
+            const themeNode = node || rootHierarchy.descendants().find(n => n.data.action === "theme");
+            if (themeNode) {
+                themeNode.data.name = isDarkMode ? "淺色模式" : "深色模式";
+            }
+            updateTree(rootHierarchy);
+        }
+
+        function toggleColorScheme(node) {
+            isGroupColor = !isGroupColor;
+            document.body.classList.toggle("group-color", isGroupColor);
+            const csNode = node || rootHierarchy.descendants().find(n => n.data.action === "colorScheme");
+            if (csNode) {
+                csNode.data.name = isGroupColor ? "通用配色" : "分組配色";
+            }
+            updateTree(rootHierarchy);
+        }
+
+        // Modal Controls
+        const helpModal = document.getElementById("help-modal");
+        document.getElementById("close-modal-btn").onclick = () => helpModal.classList.add("hidden");
+        document.getElementById("confirm-modal-btn").onclick = () => helpModal.classList.add("hidden");
+
+        const designModal = document.getElementById("design-modal");
+        document.getElementById("close-design-modal-btn").onclick = () => designModal.classList.add("hidden");
+        document.getElementById("confirm-design-modal-btn").onclick = () => designModal.classList.add("hidden");
+
+        const detailModal = document.getElementById("detail-modal");
+        document.getElementById("close-detail-modal-btn").onclick = () => detailModal.classList.add("hidden");
+        document.getElementById("confirm-detail-modal-btn").onclick = () => detailModal.classList.add("hidden");
+
+        function openDetailModal(d) {
+            const pathNames = d.ancestors().reverse().map(n => n.data.name).join(" ➔ ");
+            document.getElementById("detail-node-path").innerText = pathNames;
+            document.getElementById("detail-node-title").innerText = d.data.name;
+
+            const name = d.data.name;
+            let desc = "";
+            let code = "";
+
+            if (d.depth === 0) {
+                desc = "D3.js (Data-Driven Documents) 是基於 Web 標準（SVG, Canvas, HTML, CSS）的高階資料視覺化 JavaScript 程式庫，提供強大的資料綁定與幾何運算能力。";
+                code = "// Vibe Coding 指令範例：\n// 「請使用 D3.js 繪製一個包含 Smooth Curve 與動畫過渡的響應式圖表。」";
+            } else if (d.depth === 1) {
+                desc = `「${name}」為 D3.js 架構下的核心模組分層，收納了多個功能相近的子模組與演算工具。`;
+                code = `// 分層領域：${name}\n// 含旗下所有模組與建構器 API`;
+            } else {
+                desc = `「${name}」是 D3.js 提供的具體 API 語法或方法組件，用於協助處理資料轉換、DOM 渲染或動態交互。`;
+                code = `// 典型用法 / Vibe Coding 語法提示：\nconst result = ${name.split(" ")[0]}(...);\n// 用於資料映射、幾何計算或 DOM 綁定鏈接`;
+            }
+
+            document.getElementById("detail-node-desc").innerText = desc;
+            document.getElementById("detail-node-code").innerText = code;
+            detailModal.classList.remove("hidden");
+        }
+
+        function getCartesian(d) {
+            if (d.depth === 0) return { x: 0, y: 0 };
+            return {
+                x: d.y * Math.sin(d.x),
+                y: -d.y * Math.cos(d.x)
+            };
+        }
+
+        function getQuadrant(xRad) {
+            let deg = (xRad * 180 / Math.PI) % 360;
+            if (deg < 0) deg += 360;
+
+            if (deg >= 315 || deg < 45) return "top";
+            if (deg >= 45 && deg < 135) return "right";
+            if (deg >= 135 && deg < 225) return "bottom";
+            return "left";
+        }
+
+        function getNodeIcon(d) {
+            if (d.data.isSettings && d.depth === 1) return "settings";
+            if (d.data.action === "help") return "info";
+            if (d.data.action === "theme") {
+                return isDarkMode ? "brightness_7" : "brightness_4";
+            }
+            if (d.data.action === "colorScheme") {
+                return isGroupColor ? "format_color_fill" : "palette";
+            }
+            if (d.data.action === "design") return "lightbulb_2";
+            return null;
+        }
+
+        function handleNodeClick(event, d) {
+            event.stopPropagation();
+
+            if (d.depth === 0) {
+                currentExpandStage = (currentExpandStage + 1) % (maxTreeDepth + 1);
+                setExpansionToDepth(rootHierarchy, currentExpandStage);
+                updateTree(d);
+                return;
+            }
+
+            if (d.data.action === "help") {
+                helpModal.classList.remove("hidden");
+                return;
+            }
+            if (d.data.action === "theme") {
+                toggleTheme(d);
+                return;
+            }
+            if (d.data.action === "colorScheme") {
+                toggleColorScheme(d);
+                return;
+            }
+            if (d.data.action === "design") {
+                designModal.classList.remove("hidden");
+                return;
+            }
+
+            if (d.children) {
+                d._children = d.children;
+                d.children = null;
+            } else if (d._children) {
+                d.children = d._children;
+                d._children = null;
+            }
+            updateTree(d);
+        }
+
+        const settingsDrag = d3.drag()
+            .on("drag", function(event, d) {
+                if (!d.data.isSettings || d.depth !== 1) return;
+                
+                // Calculate pointer angle theta relative to central origin (0, 0)
+                let angle = Math.atan2(event.x, -event.y);
+                if (angle < 0) angle += 2 * Math.PI;
+
+                d.x = angle;
+                d.data._fixedX = angle;
+
+                // Sync child nodes' angles around updated settings root angle
+                const children = d.children || d._children;
+                if (children) {
+                    const spread = 0.18;
+                    const count = children.length;
+                    children.forEach((child, i) => {
+                        const offset = (i - (count - 1) / 2) * spread;
+                        child.x = angle + offset;
+                        child.data._fixedX = child.x;
+                    });
+                }
+
+                // Smoothly update render withQuadrant-based text orientation
+                updateTree(d);
+            });
+
+        function updateTree(source) {
+            // Apply PRE-CALCULATED fixed memory angles to active nodes
+            rootHierarchy.descendants().forEach(d => {
+                d.x = d.data._fixedX;
+                d.y = d.data._fixedY;
+            });
+
+            const nodes = rootHierarchy.descendants();
+            const links = rootHierarchy.links();
+
+            const radialLink = d3.linkRadial()
+                .angle(d => d.x)
+                .radius(d => d.y);
+
+            function getLinkPath(d) {
+                if (d.source.depth === 0) {
+                    const p = getCartesian(d.target);
+                    return `M0,0L${p.x},${p.y}`;
+                }
+                return radialLink(d);
+            }
+
+            // --- LINKS RENDER ---
+            const linkSelection = gLinks.selectAll(".link-path")
+                .data(links, d => d.target.data.name + "_" + d.target.depth);
+
+            const linkEnter = linkSelection.enter().append("path")
+                .attr("class", "link-path")
+                .attr("d", d => {
+                    if (d.source.depth === 0) {
+                        const p = source.x0 !== undefined ? getCartesian({ x: source.x0, y: source.y0, depth: source.depth }) : { x: 0, y: 0 };
+                        return `M0,0L${p.x},${p.y}`;
+                    }
+                    const o = { x: source.x0 || source.x, y: source.y0 || source.y };
+                    return radialLink({ source: o, target: o });
+                });
+
+            linkSelection.merge(linkEnter).transition().duration(200)
+                .attr("d", getLinkPath)
+                .style("stroke", d => {
+                    if (isGroupColor && d.target.depth > 0) {
+                        return getBranchColor(d.target);
+                    }
+                    return isDarkMode ? "#334155" : "#cbd5e1";
+                })
+                .style("stroke-opacity", isGroupColor ? 0.75 : 0.85)
+                .style("stroke-width", isGroupColor ? "1.5px" : "1.2px");
+
+            linkSelection.exit().transition().duration(200)
+                .attr("d", d => {
+                    if (d.source.depth === 0) {
+                        const p = getCartesian(source);
+                        return `M0,0L${p.x},${p.y}`;
+                    }
+                    const o = { x: source.x, y: source.y };
+                    return radialLink({ source: o, target: o });
+                })
+                .remove();
+
+            // --- NODES RENDER ---
+            const nodeSelection = gNodes.selectAll(".node-group")
+                .data(nodes, d => d.data.name + "_" + d.depth);
+
+            const nodeEnter = nodeSelection.enter().append("g")
+                .attr("class", "node-group")
+                .attr("transform", d => {
+                    const p = source.x0 !== undefined ? getCartesian({ x: source.x0, y: source.y0, depth: source.depth }) : getCartesian(d);
+                    return `translate(${p.x},${p.y})`;
+                });
+
+            const circleEnter = nodeEnter.append("circle")
+                .attr("class", "node-circle")
+                .style("cursor", "pointer")
+                .on("click", handleNodeClick);
+
+            const iconEnter = nodeEnter.append("text")
+                .attr("class", "node-icon material-symbols-outlined")
+                .style("cursor", d => (d.data.isSettings && d.depth === 1) ? "grab" : "pointer")
+                .on("click", handleNodeClick);
+
+            const textEnter = nodeEnter.append("text")
+                .attr("class", "node-label")
+                .style("cursor", "pointer")
+                .on("click", (event, d) => {
+                    event.stopPropagation();
+
+                    if (d.data.action === "help") {
+                        helpModal.classList.remove("hidden");
+                        return;
+                    }
+                    if (d.data.action === "theme") {
+                        toggleTheme(d);
+                        return;
+                    }
+                    if (d.data.action === "colorScheme") {
+                        toggleColorScheme(d);
+                        return;
+                    }
+                    if (d.data.action === "design") {
+                        designModal.classList.remove("hidden");
+                        return;
+                    }
+
+                    openDetailModal(d);
+                });
+
+            const nodeUpdate = nodeSelection.merge(nodeEnter);
+
+            // Apply custom drag behavior to "說明・設定" node
+            nodeUpdate.filter(d => d.data.isSettings && d.depth === 1)
+                .call(settingsDrag);
+
+            nodeUpdate.transition().duration(200)
+                .attr("transform", d => {
+                    const pos = getCartesian(d);
+                    return `translate(${pos.x},${pos.y})`;
+                });
+
+            // Update Circle Style & Size
+            nodeUpdate.select("circle")
+                .style("display", d => getNodeIcon(d) ? "none" : "block")
+                .attr("class", d => d.depth === 0 ? "node-circle root-circle" : "node-circle")
+                .attr("r", d => d.depth === 0 ? 58 : (d.depth === 1 ? 5 : 4))
+                .attr("fill", d => {
+                    if (d.depth === 0) return isDarkMode ? "#d97706" : "#2563eb";
+                    if (isGroupColor) {
+                        const color = getBranchColor(d);
+                        return d._children ? color : (isDarkMode ? "#0f172a" : "#f8fafc");
+                    }
+                    if (d.data.isSettings || d.data.action) return isDarkMode ? "#f59e0b" : "#d97706";
+                    return d._children ? "#2563eb" : (isDarkMode ? "#0f172a" : "#f8fafc");
+                })
+                .attr("stroke", d => {
+                    if (d.depth === 0) return isDarkMode ? "#f59e0b" : "#60a5fa";
+                    if (isGroupColor && d.depth > 0) {
+                        return getBranchColor(d);
+                    }
+                    if (d.data.isSettings || d.data.action) return "#f59e0b";
+                    return d._children ? "#1d4ed8" : "#0284c7";
+                })
+                .attr("stroke-width", d => d.depth === 0 ? 4 : 1.8);
+
+            // Update Icon Character & Colors
+            nodeUpdate.select(".node-icon")
+                .style("display", d => getNodeIcon(d) ? "block" : "none")
+                .text(d => getNodeIcon(d) || "")
+                .style("fill", d => {
+                    if (isGroupColor) return getBranchColor(d);
+                    return isDarkMode ? "#f59e0b" : "#d97706";
+                });
+
+            // Update Label Text & Quadrant Layout Rules
+            nodeUpdate.select("text.node-label")
+                .each(function(d) {
+                    const text = d3.select(this);
+
+                    if (d.depth === 0) {
+                        text.attr("class", "node-label root-label")
+                            .attr("style", "writing-mode: horizontal-tb;")
+                            .attr("dx", 0)
+                            .attr("dy", 0)
+                            .attr("text-anchor", "middle");
+
+                        text.text(null);
+                        const lines = d.data.name.split(/[\s\n]+/);
+                        lines.forEach((line, i) => {
+                            text.append("tspan")
+                                .attr("x", 0)
+                                .attr("dy", i === 0 ? "-0.3em" : "1.15em")
+                                .attr("text-anchor", "middle")
+                                .text(line);
+                        });
+                        return;
+                    }
+
+                    // Hide "說明・設定" text label completely when collapsed, showing ONLY icon
+                    if (d.data.isSettings && d.depth === 1 && d._children && !d.children) {
+                        text.text("");
+                        return;
+                    }
+
+                    text.text(d.data.name);
+
+                    if (isGroupColor && d.depth > 0) {
+                        text.transition().duration(200).style("fill", getBranchColor(d));
+                    } else {
+                        text.transition().duration(200).style("fill", null);
+                    }
+
+                    const quadrant = getQuadrant(d.x);
+
+                    if (quadrant === "top") {
+                        text.attr("style", "writing-mode: vertical-rl;")
+                            .attr("dx", 0)
+                            .attr("dy", -10)
+                            .attr("text-anchor", "end");
+                    } else if (quadrant === "bottom") {
+                        text.attr("style", "writing-mode: vertical-rl;")
+                            .attr("dx", 0)
+                            .attr("dy", 10)
+                            .attr("text-anchor", "start");
+                    } else if (quadrant === "right") {
+                        text.attr("style", "writing-mode: horizontal-tb;")
+                            .attr("dx", 8)
+                            .attr("dy", 3)
+                            .attr("text-anchor", "start");
+                    } else if (quadrant === "left") {
+                        text.attr("style", "writing-mode: horizontal-tb;")
+                            .attr("dx", -8)
+                            .attr("dy", 3)
+                            .attr("text-anchor", "end");
+                    }
+                });
+
+            nodeSelection.exit().transition().duration(200)
+                .attr("transform", d => {
+                    const p = getCartesian(source);
+                    return `translate(${p.x},${p.y})`;
+                })
+                .remove();
+
+            // Ensure central root node is always on top
+            gNodes.selectAll(".node-group")
+                .filter(d => d.depth === 0)
+                .raise();
+
+            nodes.forEach(d => {
+                d.x0 = d.x;
+                d.y0 = d.y;
+            });
+        }
+
+        // Window Resize Handler
+        window.addEventListener("resize", () => {
+            width = container.node().clientWidth;
+            height = container.node().clientHeight;
+            updateTree(rootHierarchy);
+        });
+
+        // Initialize
+        window.onload = function() {
+            resetView();
+            updateTree(rootHierarchy);
+        };
+    </script>
+</body>
+  </html>
